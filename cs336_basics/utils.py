@@ -1,5 +1,7 @@
 import os
 from typing import BinaryIO
+import regex
+from collections import Counter
 
 def find_chunk_boundaries(
   file: BinaryIO,
@@ -46,3 +48,21 @@ def find_chunk_boundaries(
 
   # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
   return sorted(set(chunk_boundaries))
+
+def chunks_iter(
+  file: BinaryIO,
+  desired_num_chunks: int,
+  split_special_token: bytes,
+):
+  boundaries = find_chunk_boundaries(file, desired_num_chunks, split_special_token)
+
+  for (start, end) in zip(boundaries, boundaries[1:]):
+    file.seek(start)
+    data = file.read(end-start).removeprefix(split_special_token)
+    yield data.decode('utf-8', errors="ignore")
+
+# TODO: check the latest https://github.com/openai/tiktoken/blame/main/tiktoken_ext/openai_public.py
+# r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}++| ?\p{N}++| ?[^\s\p{L}\p{N}]++|\s++$|\s+(?!\S)|\s"""
+PAT = regex.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+def chunk_to_pretokenizer(chunk: str, pat: regex.Pattern[str] | str = PAT):
+  return Counter(i[0] for i in regex.finditer(PAT, chunk))
