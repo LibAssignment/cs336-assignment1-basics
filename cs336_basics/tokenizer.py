@@ -1,14 +1,17 @@
 from collections import Counter
 from typing import Self
 import regex
+import heapq
 
 from .utils import chunk_to_pretokenizer, chunks_iter
 
 class Tokenizer:
-  def __init__(self, words: dict[str, int]) -> None:
-    self.vocabs = [bytes([c]) for c in range(256)]
+  def __init__(self, words: dict[str, int], *, special_tokens: list[str] | None = None) -> None:
+    self.special_tokens = [] if special_tokens is None else special_tokens
+    special_tokens_len = len(self.special_tokens)
+    self.vocabs = [s.encode() for s in self.special_tokens] + [bytes([c]) for c in range(256)]
     self.merges = list[tuple[int, int]]()
-    self.current_tuples = Counter({tuple(k.encode()): v for k, v in words.items()})
+    self.current_tuples = Counter({tuple(i + special_tokens_len for i in k.encode()): v for k, v in words.items()})
     self._tmp_merge = None
 
   def display_tuples(self, t: dict[tuple[int, ...], int] | None = None):
@@ -30,7 +33,7 @@ class Tokenizer:
           words = chunk_to_pretokenizer(c)
           final_words += words
 
-    return cls(final_words)
+    return cls(final_words, special_tokens=special_tokens)
 
   @property
   def vocabs_dict(self):
@@ -71,8 +74,11 @@ class Tokenizer:
       for a, b in zip(k, k[1:]):
         tmp_merge[(a, b)] = tmp_merge.get((a, b), 0) + v
     self._tmp_merge = tmp_merge
-    current_merge = tmp_merge.most_common(1)[0][0]
-    self.merge_tuples(current_merge)
+    most_common = heapq.nlargest(1, tmp_merge.items(), lambda i: (i[1], self.vocabs[i[0][0]] + self.vocabs[i[0][1]]))
+    current_merge = None
+    if most_common:
+      current_merge = most_common[0]
+      self.merge_tuples(current_merge[0])
     # merges.append(current_merge)
     return current_merge
 
