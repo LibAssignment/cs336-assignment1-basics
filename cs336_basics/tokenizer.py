@@ -2,6 +2,7 @@ from collections import Counter
 from typing import Self
 import regex
 import heapq
+import os
 
 from .utils import chunk_to_pretokenizer, chunks_iter
 
@@ -23,12 +24,12 @@ class Tokenizer:
     return tuple(self.vocabs[c] for c in t)
 
   @classmethod
-  def load_file(cls, input_path: str, special_tokens: list[str]) -> Self:
+  def load_file(cls, input_path: str | os.PathLike, special_tokens: list[str], desired_num_chunks=1000) -> Self:
     re_special_tokens = '|'.join(regex.escape(s) for s in special_tokens)
 
     with open(input_path, 'rb') as f:
       final_words = Counter[str]()
-      for chunk in chunks_iter(f, 1000, special_tokens[0].encode()):
+      for chunk in chunks_iter(f, desired_num_chunks=desired_num_chunks, split_special_token=special_tokens[0].encode()):
         for c in regex.split(re_special_tokens, chunk):
           words = chunk_to_pretokenizer(c)
           final_words += words
@@ -74,7 +75,7 @@ class Tokenizer:
       for a, b in zip(k, k[1:]):
         tmp_merge[(a, b)] = tmp_merge.get((a, b), 0) + v
     self._tmp_merge = tmp_merge
-    most_common = heapq.nlargest(1, tmp_merge.items(), lambda i: (i[1], self.vocabs[i[0][0]] + self.vocabs[i[0][1]]))
+    most_common = heapq.nlargest(1, tmp_merge.items(), lambda i: (i[1], self.vocabs[i[0][0]], self.vocabs[i[0][1]]))
     current_merge = None
     if most_common:
       current_merge = most_common[0]
@@ -83,12 +84,14 @@ class Tokenizer:
     return current_merge
 
 def train_bpe(
-    input_path: str,
+    input_path: str | os.PathLike,
     vocab_size: int,
     special_tokens: list[str],
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
   tokenizer = Tokenizer.load_file(input_path, special_tokens)
   while len(tokenizer.vocabs) < vocab_size:
-    tokenizer.step()
+    current = tokenizer.step()
+    if current is None:
+      break
 
   return tokenizer.vocabs_dict, tokenizer.merges_display
