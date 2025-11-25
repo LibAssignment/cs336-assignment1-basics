@@ -22,6 +22,14 @@ class PreMerge:
   occurs_in: set[int] = field(default_factory=set)
   freq: int = 0
 
+  def add(self, i: int, v: int):
+    self.occurs_in.add(i)
+    self.freq += v
+
+  def remove(self, i: int, v: int):
+    self.occurs_in.discard(i)
+    self.freq -= v
+
 class Tokenizer:
   def __init__(self, words: dict[str, int], *, special_tokens: list[str] | None = None) -> None:
     self.special_tokens = [] if special_tokens is None else special_tokens
@@ -82,13 +90,14 @@ class Tokenizer:
       f.clear()
       f.extend(result)
       return f
-    # self.current_tuples = Counter({merge_tuple(k):v for k, v in self.current_tuples.items()})
-    for t in self.current_tuples:
+    for i in m.occurs_in:
+      t = self.current_tuples[i]
       t.idxs = merge_tuple(t.idxs)
+    self.pre_merges.pop(m.tp)
     self.vocabs.append(self.vocabs[m.tp[0]] + self.vocabs[m.tp[1]])
     self.merges.append(m)
 
-  def step(self):
+  def init(self):
     self.pre_merges.clear()
     for i, t in enumerate(self.current_tuples):
       if len(t.idxs) <= 1:
@@ -100,13 +109,30 @@ class Tokenizer:
         if m is None:
           m = PreMerge(tp)
           self.pre_merges[tp] = m
-        m.freq += t.freq
-        m.occurs_in.add(i)
+        m.add(i, t.freq)
+
+  def step(self):
+    if len(self.pre_merges) == 0:
+      self.init()
     most_common = heapq.nlargest(1, self.pre_merges.values(), lambda m: (m.freq, self.vocabs[m.tp[0]], self.vocabs[m.tp[1]]))
-    current_merge = None
-    if most_common:
-      current_merge = most_common[0]
-      self.merge_tuples(current_merge)
+    current_merge = most_common[0] if most_common else None
+    if current_merge is None:
+      return
+    # occurs_in = sorted(current_merge.occurs_in)
+    for i in current_merge.occurs_in:
+      t = self.current_tuples[i]
+      for tp in zip(t.idxs, t.idxs[1:]):
+        if tp != current_merge.tp:
+          self.pre_merges[tp].remove(i, t.freq)
+    self.merge_tuples(current_merge)
+    for i in current_merge.occurs_in:
+      t = self.current_tuples[i]
+      for tp in zip(t.idxs, t.idxs[1:]):
+        m = self.pre_merges.get(tp)
+        if m is None:
+          m = PreMerge(tp)
+          self.pre_merges[tp] = m
+        m.add(i, t.freq)
     return current_merge
 
 def train_bpe(
