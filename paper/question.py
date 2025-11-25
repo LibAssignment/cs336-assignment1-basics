@@ -51,27 +51,34 @@ cannot_decode(b'\xff')
 from cs336_basics.tokenizer import Tokenizer
 import logging
 import os
+import time
 
 special_tokens = ["<|endoftext|>"]
-input_path = './fixtures/TinyStories-train.txt'
+input_path = './fixtures/TinyStoriesV2-GPT4-train.txt'
 vocab_size = 10_000
 
 tokenizer = None
 if os.path.exists(input_path):
   os.makedirs("logs", exist_ok=True)
   logging.basicConfig(level=logging.DEBUG, filename="logs/tokenizer.log")
-  tokenizer = Tokenizer.load_file(input_path, special_tokens)
+  starttime = time.time()
+  tokenizer = Tokenizer.training_from_file(input_path, special_tokens)
   while len(tokenizer.vocabs) < vocab_size:
     current_merge = tokenizer.step()
     if current_merge is None:
       break
-    logging.debug(f"merge {tokenizer.display_tuple(current_merge.tp)} => [{len(tokenizer.vocabs)}] {current_merge.freq}")
+    logging.debug(f"merge {tokenizer.apply_idx(current_merge.tp)} => [{len(tokenizer.vocabs)}] {current_merge.freq}")
+  elapsed = time.time() - starttime
+  print(elapsed, len(tokenizer.vocabs))
+  logging.info(f"finished in {elapsed} seconds")
+
   import json
 
   with open("tokenizer.json", "w") as f:
     json.dump(tokenizer.visible_vocabs_dict, f, ensure_ascii=False, indent=2)
+
 # %%
 if tokenizer is not None:
-  print(max(tokenizer.vocabs, key=len)) # b' accomplishment'
+  print(max(tokenizer.vocabs.values(), key=len)) # b' accomplishment'
 
 # %%

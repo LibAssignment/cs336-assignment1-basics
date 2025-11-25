@@ -29,7 +29,7 @@ Done, see: `file:cs336_basics/tokenizer.py`
 
 == Problem (train_bpe_tinystories): BPE Training on TinyStories
 === a) How many hours and memory did training take? What is the longest token in the vocabulary? Does it make sense?
-1. Training took around 132 seconds and ~4GB of memory.
+1. Training took around 160 seconds and ~1GB of memory.
 2. The longest token is `b' accomplishment'`
 3. Make sense, since the tokenizer would try to merge frequent pairs, and this word might appear frequently in the dataset.
 
@@ -47,3 +47,5 @@ TODO
 
 == Problem (tokenizer): Implementing the tokenizer
 TODO
+
+== Problem (tokenizer_experiments): Experiments with tokenizers
