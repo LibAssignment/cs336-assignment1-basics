@@ -1,6 +1,7 @@
 from collections import Counter
 from collections.abc import Iterable, Iterator
 from dataclasses import field, dataclass
+from functools import lru_cache
 import json
 from typing import Self, TypeAlias
 import regex
@@ -78,6 +79,7 @@ class Tokenizer:
     if self.completed:
       return
     self.vocab_rev = {v: i for i, v in self.vocabs.items()}
+    self.merge_dict = {v.tp: v for v in self.merges}
     re_special_tokens = '|'.join(map(regex.escape, sorted(self.special_tokens, reverse=True)))
     # self.re_special_tokens = regex.compile(re_special_tokens)
     self.re_special_tokens_capture = regex.compile('(' + re_special_tokens + ')') if re_special_tokens else None
@@ -167,6 +169,7 @@ class Tokenizer:
     self._vocab_byte_rev = {i: self.vocab_rev[bytes([i])] for i in range(256)}
     return self._vocab_byte_rev[b]
 
+  @lru_cache(maxsize=10000)
   def _encode_pretoken(self, s: str) -> list[Idx]:
     # TODO handle special_tokens
     idxs = [self.encode_byte(i) for i in s.encode(ENCODING)]
@@ -193,6 +196,7 @@ class Tokenizer:
     return result
 
   def _encode_chunk(self, chunk: str):
+    # print(f"encode chunk {len(chunk)}")
     for c in regex.finditer(PAT, chunk):
       yield from self._encode_pretoken(c[0])
 
@@ -211,6 +215,10 @@ class Tokenizer:
     if not self.completed:
       self.finish()
     return list(self._encode(s))
+
+  def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
+    for s in iterable:
+      yield from self._encode(s)
 
   def decode(self, ids: list[Idx]) -> str:
     bstr = b"".join(self.vocabs[i] for i in ids)

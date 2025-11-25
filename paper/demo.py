@@ -29,3 +29,15 @@ print(tokenizer.apply_idx(idxs))
 assert tokenizer.decode(idxs) == input_str
 
 # %%
+with open(input_path) as fin:
+  content = fin.read()
+print(len(content))
+
+# %%
+import time
+starttime = time.time()
+idxs = tokenizer.encode(content)
+elapsed = time.time() - starttime
+print(f"encode {len(idxs)} in {elapsed} second")
+
+# %%
