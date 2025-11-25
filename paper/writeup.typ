@@ -23,3 +23,27 @@ def decode_utf8_bytes_to_str_wrong(bytestring: bytes):
 
 === c) Give a two byte sequence that does not decode to any Unicode character(s).
 `b'\xff\x00'` and `b'\xff'`, since according to utf-8, any byte starting with `0xff` is invalid.
+
+== Problem (train_bpe): BPE Tokenizer Training
+Done, see: `file:cs336_basics/tokenizer.py`
+
+== Problem (train_bpe_tinystories): BPE Training on TinyStories
+=== a) How many hours and memory did training take? What is the longest token in the vocabulary? Does it make sense?
+1. Training took around 132 seconds and ~4GB of memory.
+2. The longest token is `b' accomplishment'`
+3. Make sense, since the tokenizer would try to merge frequent pairs, and this word might appear frequently in the dataset.
+
+=== b) Profile your code. What part of the tokenizer training process takes the most time?
+```python
+def step(self):
+  ...
+  # TODO: bottleneck here
+  current_merge = max(self.pre_merges.values())
+  ...
+```
+
+== Problem (train_bpe_expts_owt): BPE Training on OpenWebText
+TODO
+
+== Problem (tokenizer): Implementing the tokenizer
+TODO

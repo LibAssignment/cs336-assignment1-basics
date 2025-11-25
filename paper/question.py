@@ -56,6 +56,7 @@ special_tokens = ["<|endoftext|>"]
 input_path = './fixtures/TinyStories-train.txt'
 vocab_size = 10_000
 
+tokenizer = None
 if os.path.exists(input_path):
   os.makedirs("logs", exist_ok=True)
   logging.basicConfig(level=logging.DEBUG, filename="logs/tokenizer.log")
@@ -69,5 +70,8 @@ if os.path.exists(input_path):
 
   with open("tokenizer.json", "w") as f:
     json.dump(tokenizer.visible_vocabs_dict, f, ensure_ascii=False, indent=2)
+# %%
+if tokenizer is not None:
+  print(max(tokenizer.vocabs, key=len)) # b' accomplishment'
 
 # %%
