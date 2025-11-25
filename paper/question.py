@@ -48,3 +48,26 @@ cannot_decode(b'\xff\x00')
 cannot_decode(b'\xff')
 
 # %%
+from cs336_basics.tokenizer import Tokenizer
+import logging
+import os
+
+special_tokens = ["<|endoftext|>"]
+input_path = './fixtures/TinyStories-train.txt'
+vocab_size = 10_000
+
+if os.path.exists(input_path):
+  os.makedirs("logs", exist_ok=True)
+  logging.basicConfig(level=logging.DEBUG, filename="logs/tokenizer.log")
+  tokenizer = Tokenizer.load_file(input_path, special_tokens)
+  while len(tokenizer.vocabs) < vocab_size:
+    current_merge = tokenizer.step()
+    if current_merge is None:
+      break
+    logging.debug(f"merge {tokenizer.display_tuple(current_merge.tp)} => [{len(tokenizer.vocabs)}] {current_merge.freq}")
+  import json
+
+  with open("tokenizer.json", "w") as f:
+    json.dump(tokenizer.visible_vocabs_dict, f, ensure_ascii=False, indent=2)
+
+# %%

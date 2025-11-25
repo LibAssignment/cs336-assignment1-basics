@@ -5,7 +5,7 @@ from typing import Self, TypeAlias
 import regex
 import os
 
-from .utils import get_words_parallel
+from .utils import get_words_parallel, gpt2_bytes_to_unicode
 from typing import overload
 
 Idx: TypeAlias = int
@@ -35,6 +35,9 @@ class PreMerge:
   def key(self):
     return self.freq, self.content
 
+  def __gt__(self, other: Self) -> bool:
+    return self.key > other.key
+
 class Tokenizer:
   def __init__(self, words: dict[str, int], *, special_tokens: list[str] | None = None) -> None:
     self.special_tokens = [] if special_tokens is None else special_tokens
@@ -60,6 +63,10 @@ class Tokenizer:
   def display_tuple(self, t):
     return tuple(self.vocabs[c] for c in t)
 
+  def visable_vocab(self, b: bytes) -> str:
+    d = gpt2_bytes_to_unicode()
+    return "".join(d[i] for i in b)
+
   @classmethod
   def load_file(cls, input_path: str | os.PathLike, special_tokens: list[str], desired_num_chunks=1024) -> Self:
     re_special_tokens = '|'.join(regex.escape(s) for s in special_tokens)
@@ -76,6 +83,10 @@ class Tokenizer:
   @property
   def vocabs_dict(self):
     return {i: v for i, v in enumerate(self.vocabs)}
+
+  @property
+  def visible_vocabs_dict(self):
+    return {self.visable_vocab(v): i for i, v in enumerate(self.vocabs)}
 
   @property
   def merges_display(self):
@@ -127,7 +138,8 @@ class Tokenizer:
       return
     # most_common = heapq.nlargest(1, self.pre_merges.values(), lambda m: (m.freq, self.vocabs[m.tp[0]], self.vocabs[m.tp[1]]))
     # current_merge = most_common[0] if most_common else None
-    current_merge = max(self.pre_merges.values(), key=lambda m: m.key)
+    # TODO: bottleneck here
+    current_merge = max(self.pre_merges.values())
     if current_merge is None:
       return
     # occurs_in = sorted(current_merge.occurs_in)
