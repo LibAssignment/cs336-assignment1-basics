@@ -46,6 +46,8 @@ def step(self):
 TODO
 
 == Problem (tokenizer): Implementing the tokenizer
-TODO
+Done, see: `file:cs336_basics/tokenizer.py`
+
+NOTE: there's performance issue with the current implementation.
 
 == Problem (tokenizer_experiments): Experiments with tokenizers
