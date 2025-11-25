@@ -3,10 +3,10 @@ from collections.abc import Iterable
 from dataclasses import field, dataclass
 from typing import Self, TypeAlias
 import regex
-import heapq
 import os
 
-from .utils import chunk_to_pretokenizer, chunks_iter, get_words, get_words_parallel
+from .utils import get_words_parallel
+from typing import overload
 
 Idx: TypeAlias = int
 
@@ -19,6 +19,7 @@ class PreToken:
 @dataclass
 class PreMerge:
   tp: tuple[Idx, Idx]
+  content: tuple[bytes, bytes]
   occurs_in: set[int] = field(default_factory=set)
   freq: int = 0
 
@@ -29,6 +30,10 @@ class PreMerge:
   def remove(self, i: int, v: int):
     self.occurs_in.discard(i)
     self.freq -= v
+
+  @property
+  def key(self):
+    return self.freq, self.content
 
 class Tokenizer:
   def __init__(self, words: dict[str, int], *, special_tokens: list[str] | None = None) -> None:
@@ -48,7 +53,11 @@ class Tokenizer:
       t = self.current_tuples
     return Counter({self.display_tuple(k.idxs): k.freq for k in t})
 
-  def display_tuple(self, t: Iterable[Idx]) -> tuple[bytes, ...]:
+  @overload
+  def display_tuple(self, t: tuple[int, int]) -> tuple[bytes, bytes]: ...
+  @overload
+  def display_tuple(self, t: Iterable[Idx]) -> tuple[bytes, ...]: ...
+  def display_tuple(self, t):
     return tuple(self.vocabs[c] for c in t)
 
   @classmethod
@@ -107,15 +116,18 @@ class Tokenizer:
       for tp in zip(t.idxs, t.idxs[1:]):
         m = self.pre_merges.get(tp)
         if m is None:
-          m = PreMerge(tp)
+          m = PreMerge(tp, self.display_tuple(tp))
           self.pre_merges[tp] = m
         m.add(i, t.freq)
 
   def step(self):
     if len(self.pre_merges) == 0:
       self.init()
-    most_common = heapq.nlargest(1, self.pre_merges.values(), lambda m: (m.freq, self.vocabs[m.tp[0]], self.vocabs[m.tp[1]]))
-    current_merge = most_common[0] if most_common else None
+    if len(self.pre_merges) == 0:
+      return
+    # most_common = heapq.nlargest(1, self.pre_merges.values(), lambda m: (m.freq, self.vocabs[m.tp[0]], self.vocabs[m.tp[1]]))
+    # current_merge = most_common[0] if most_common else None
+    current_merge = max(self.pre_merges.values(), key=lambda m: m.key)
     if current_merge is None:
       return
     # occurs_in = sorted(current_merge.occurs_in)
@@ -130,7 +142,7 @@ class Tokenizer:
       for tp in zip(t.idxs, t.idxs[1:]):
         m = self.pre_merges.get(tp)
         if m is None:
-          m = PreMerge(tp)
+          m = PreMerge(tp, self.display_tuple(tp))
           self.pre_merges[tp] = m
         m.add(i, t.freq)
     return current_merge
