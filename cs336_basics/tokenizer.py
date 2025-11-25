@@ -1,12 +1,12 @@
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import field, dataclass
 import json
 from typing import Self, TypeAlias
 import regex
 import os
 
-from .utils import get_words_parallel, gpt2_bytes_to_unicode
+from .utils import PAT, PAT_str, get_words_parallel, gpt2_bytes_to_unicode
 from typing import overload
 
 Idx: TypeAlias = int
@@ -52,14 +52,14 @@ class PreMerge:
     return self.key > other.key
 
 class Tokenizer:
-  def __init__(self, vocabs: dict[int, bytes] | list[bytes], merges: list[tuple[bytes, bytes]], special_tokens: list[str] | None = None):
+  def __init__(self, vocabs: dict[Idx, bytes] | list[bytes], merges: list[tuple[bytes, bytes]], special_tokens: list[str] | None = None):
     self.vocabs = vocabs if isinstance(vocabs, dict) else {i: v for i,v in enumerate(vocabs)}
     self.max_vocab_idx = max(self.vocabs.keys())
     self.vocab_rev = {v: i for i, v in self.vocabs.items()}
     self.merges = [PreMerge.create_lookup(tp, vocab_rev=self.vocab_rev) for tp in merges]
     self.pre_merges = dict[tuple[Idx, Idx], PreMerge]()
     self.current_tokens = list[PreToken]()
-    self.special_tokens = [] if special_tokens is None else special_tokens
+    self.special_tokens = set[str]() if special_tokens is None else set(special_tokens)
     self.completed = False
 
     self.finish()
@@ -78,9 +78,10 @@ class Tokenizer:
     if self.completed:
       return
     self.vocab_rev = {v: i for i, v in self.vocabs.items()}
-    sorted_special_tokens = sorted(self.special_tokens, reverse=True)
-    self.re_special_tokens = regex.compile('|'.join(map(regex.escape, sorted_special_tokens)))
-    self.re_special_tokens_capture = regex.compile('(' + '|'.join(map(regex.escape, sorted_special_tokens)) + ')')
+    re_special_tokens = '|'.join(map(regex.escape, sorted(self.special_tokens, reverse=True)))
+    # self.re_special_tokens = regex.compile(re_special_tokens)
+    self.re_special_tokens_capture = regex.compile('(' + re_special_tokens + ')') if re_special_tokens else None
+    self.re_tokens_iter = regex.compile(re_special_tokens + "|" + PAT_str) if re_special_tokens else regex.compile(PAT_str)
     for m in self.merges:
       m.tar = self.vocab_rev[m.content[0] + m.content[1]]
     self.completed = True
@@ -166,9 +167,7 @@ class Tokenizer:
     self._vocab_byte_rev = {i: self.vocab_rev[bytes([i])] for i in range(256)}
     return self._vocab_byte_rev[b]
 
-  def _encode(self, s: str) -> list[Idx]:
-    if not self.completed:
-      self.finish()
+  def _encode_pretoken(self, s: str) -> list[Idx]:
     # TODO handle special_tokens
     idxs = [self.encode_byte(i) for i in s.encode(ENCODING)]
     if not idxs:
@@ -193,16 +192,27 @@ class Tokenizer:
       i = nxt[i]
     return result
 
-  def encode(self, s: str) -> list[Idx]:
-    result = list[Idx]()
-    for chunk in regex.split(self.re_special_tokens_capture, s):
-      if chunk not in self.special_tokens:
-        result.extend(self._encode(chunk))
-      else:
-        result.append(self.vocab_rev[chunk.encode()])
-    return result
+  def _encode_chunk(self, chunk: str):
+    for c in regex.finditer(PAT, chunk):
+      yield from self._encode_pretoken(c[0])
 
-  def decode(self, ids: list[int]) -> str:
+  def _encode(self, s: str):
+    if self.re_special_tokens_capture is None:
+      yield from self._encode_chunk(s)
+      return
+
+    for i in regex.splititer(self.re_special_tokens_capture, s):
+      if i in self.special_tokens:
+        yield self.vocab_rev[i.encode()]
+      else:
+        yield from self._encode_chunk(i)
+
+  def encode(self, s: str):
+    if not self.completed:
+      self.finish()
+    return list(self._encode(s))
+
+  def decode(self, ids: list[Idx]) -> str:
     bstr = b"".join(self.vocabs[i] for i in ids)
     return bstr.decode(ENCODING, errors="replace")
 

@@ -65,7 +65,8 @@ def chunks_iter(
 
 # TODO: check the latest https://github.com/openai/tiktoken/blame/main/tiktoken_ext/openai_public.py
 # r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}++| ?\p{N}++| ?[^\s\p{L}\p{N}]++|\s++$|\s+(?!\S)|\s"""
-PAT = regex.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+PAT_str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+PAT = regex.compile(PAT_str)
 def chunk_to_pretokenizer(chunk: str, pat: regex.Pattern[str] | str = PAT, re_special_token: regex.Pattern[str] | str | None = None):
   if re_special_token is None:
     return Counter(i[0] for i in regex.finditer(pat, chunk))

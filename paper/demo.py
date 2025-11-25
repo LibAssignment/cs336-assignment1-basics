@@ -22,9 +22,10 @@ tokenizer.vocabs
 "hello, world!"  => (b'he', b'll', b'o', b',', b' world', b'!')
 "Hello, world!"  => (b'Hello', b',', b' world', b'!')
 """
-input_str = "Hello, world! aaa my<|endoftext|>world."
+input_str = "Hello, world! aaa my<|endoftext|>\n\nworld."
 idxs = tokenizer.encode(input_str)
-print(tokenizer.apply_idx(idxs)) # (b'Hello', b',', b' world', b'!', b' a', b'a', b'a', b' my', b'<|endoftext|>', b'w', b'or', b'ld', b'.')
+print(tokenizer.apply_idx(idxs))
+# (b'Hello', b',', b' world', b'!', b' a', b'a', b'a', b' my', b'<|endoftext|>', b'\n', b'\n', b'w', b'or', b'ld', b'.')
 assert tokenizer.decode(idxs) == input_str
 
 # %%
