@@ -71,6 +71,42 @@ class Tokenizer:
     )
     return this
 
+  @classmethod
+  def from_files(cls, vocab_filepath: str | os.PathLike, merges_filepath: str | os.PathLike, special_tokens: list[str] | None = None):
+    with open(vocab_filepath, "r") as f:
+      data: dict[str, int] = json.load(f) # typing: dict
+    vocabs = {k: cls.from_visable(v) for v,k in data.items()}
+    merges = list[tuple[bytes, bytes]]()
+    with open(merges_filepath, "r") as f:
+      for line in f:
+        line = line.strip()
+        if not line:
+          continue
+        (a, b) = line.strip().split(' ')
+        merges.append((cls.from_visable(a), cls.from_visable(b)))
+    return cls(vocabs, merges, special_tokens)
+
+  def save_to_files(self, vocab_filepath: str | os.PathLike, merges_filepath: str | os.PathLike):
+    vocabs= self.visible_vocabs_dict
+    with open(vocab_filepath, "w") as f:
+      json.dump(vocabs, f, ensure_ascii=False, indent=2)
+    with open(merges_filepath, "w") as f:
+      for line in self.visible_merges_list:
+        f.write(f"{line}\n")
+
+  @classmethod
+  def training_from_file(cls, input_path: str | os.PathLike, special_tokens: list[str], desired_num_chunks=1024) -> Self:
+    re_special_tokens = '|'.join(regex.escape(s) for s in special_tokens)
+
+    final_words = get_words_parallel(
+      input_path,
+      desired_num_chunks=desired_num_chunks,
+      split_special_token=special_tokens[0].encode(),
+      re_special_tokens=re_special_tokens
+    )
+
+    return cls.create_training(final_words, special_tokens=special_tokens)
+
   def add_vocab(self, vocab: bytes, *, idx: int | None = None):
     if idx is None:
       self.max_vocab_idx += 1
@@ -98,34 +134,13 @@ class Tokenizer:
   def from_visable(s: str, *, d: dict[str, int] = {v:k for k, v in gpt2_bytes_to_unicode().items()}) -> bytes:
     return bytes([d[i] for i in s])
 
-  @classmethod
-  def from_files(cls, vocab_filepath: str | os.PathLike, merges_filepath: str | os.PathLike, special_tokens: list[str] | None = None):
-    with open(vocab_filepath, "r") as f:
-      data: dict[str, int] = json.load(f) # typing: dict
-    vocabs = {k: cls.from_visable(v) for v,k in data.items()}
-    merges = list[tuple[bytes, bytes]]()
-    with open(merges_filepath, "r") as f:
-      for line in f:
-        (a, b) = line.strip().split(' ')
-        merges.append((cls.from_visable(a), cls.from_visable(b)))
-    return cls(vocabs, merges, special_tokens)
-
-  @classmethod
-  def training_from_file(cls, input_path: str | os.PathLike, special_tokens: list[str], desired_num_chunks=1024) -> Self:
-    re_special_tokens = '|'.join(regex.escape(s) for s in special_tokens)
-
-    final_words = get_words_parallel(
-      input_path,
-      desired_num_chunks=desired_num_chunks,
-      split_special_token=special_tokens[0].encode(),
-      re_special_tokens=re_special_tokens
-    )
-
-    return cls.create_training(final_words, special_tokens=special_tokens)
-
   @property
   def visible_vocabs_dict(self):
     return {self.to_visable(v): i for i, v in self.vocabs.items()}
+
+  @property
+  def visible_merges_list(self) -> list[str]:
+    return [f"{self.to_visable(m.content[0])} {self.to_visable(m.content[1])}" for m in self.merges]
 
   @property
   def merges_display(self):

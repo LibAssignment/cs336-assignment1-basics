@@ -72,13 +72,12 @@ if os.path.exists(input_path):
   print(elapsed, len(tokenizer.vocabs))
   logging.info(f"finished in {elapsed} seconds")
 
-  import json
-
-  with open("tokenizer.json", "w") as f:
-    json.dump(tokenizer.visible_vocabs_dict, f, ensure_ascii=False, indent=2)
+  tokenizer.save_to_files("tokenizer.json", "merges.txt")
 
 # %%
-if tokenizer is not None:
-  print(max(tokenizer.vocabs.values(), key=len)) # b' accomplishment'
+from cs336_basics.tokenizer import Tokenizer
+special_tokens = ["<|endoftext|>"]
+tokenizer = Tokenizer.from_files("tokenizer.json", "merges.txt", special_tokens)
+print(max(tokenizer.vocabs.values(), key=len)) # b' accomplishment'
 
 # %%

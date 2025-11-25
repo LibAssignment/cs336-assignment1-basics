@@ -3,3 +3,4 @@ logs
 out.txt
 fixtures/
 tokenizer.json
+merges.txt
