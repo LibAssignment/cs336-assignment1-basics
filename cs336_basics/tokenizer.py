@@ -78,7 +78,9 @@ class Tokenizer:
     if self.completed:
       return
     self.vocab_rev = {v: i for i, v in self.vocabs.items()}
-    self.re_special_tokens = regex.compile('|'.join(map(regex.escape, self.special_tokens)))
+    sorted_special_tokens = sorted(self.special_tokens, reverse=True)
+    self.re_special_tokens = regex.compile('|'.join(map(regex.escape, sorted_special_tokens)))
+    self.re_special_tokens_capture = regex.compile('(' + '|'.join(map(regex.escape, sorted_special_tokens)) + ')')
     for m in self.merges:
       m.tar = self.vocab_rev[m.content[0] + m.content[1]]
     self.completed = True
@@ -164,7 +166,7 @@ class Tokenizer:
     self._vocab_byte_rev = {i: self.vocab_rev[bytes([i])] for i in range(256)}
     return self._vocab_byte_rev[b]
 
-  def encode(self, s: str) -> list[Idx]:
+  def _encode(self, s: str) -> list[Idx]:
     if not self.completed:
       self.finish()
     # TODO handle special_tokens
@@ -175,8 +177,9 @@ class Tokenizer:
     nxt = [i+1 for i in range(idx_len)]
     for m in self.merges:
       i = 0
-      while True:
+      while i < idx_len:
         j = nxt[i]
+        # no next idx
         if j >= idx_len:
           break
         if (idxs[i], idxs[j]) == m.tp:
@@ -188,6 +191,15 @@ class Tokenizer:
     while i < idx_len:
       result.append(idxs[i])
       i = nxt[i]
+    return result
+
+  def encode(self, s: str) -> list[Idx]:
+    result = list[Idx]()
+    for chunk in regex.split(self.re_special_tokens_capture, s):
+      if chunk not in self.special_tokens:
+        result.extend(self._encode(chunk))
+      else:
+        result.append(self.vocab_rev[chunk.encode()])
     return result
 
   def decode(self, ids: list[int]) -> str:
