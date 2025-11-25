@@ -61,7 +61,7 @@ class Tokenizer:
     return tuple(self.vocabs[c] for c in t)
 
   @classmethod
-  def load_file(cls, input_path: str | os.PathLike, special_tokens: list[str], desired_num_chunks=1000) -> Self:
+  def load_file(cls, input_path: str | os.PathLike, special_tokens: list[str], desired_num_chunks=1024) -> Self:
     re_special_tokens = '|'.join(regex.escape(s) for s in special_tokens)
 
     final_words = get_words_parallel(

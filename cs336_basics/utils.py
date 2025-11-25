@@ -2,6 +2,7 @@ import os
 from typing import BinaryIO
 import regex
 from collections import Counter
+import logging
 
 def find_chunk_boundaries(
   file: BinaryIO,
@@ -88,6 +89,7 @@ from multiprocessing import Pool
 from dataclasses import dataclass
 @dataclass
 class GetWordsParam:
+  idx: int
   filename: str | os.PathLike
   start: int
   end: int
@@ -101,7 +103,9 @@ def _get_words_parallel_run(param: GetWordsParam):
     f.seek(param.start)
     data = f.read(param.end - param.start).removeprefix(param.remove_prefix)
     chunk = data.decode('utf-8', errors='ignore')
-  return chunk_to_pretokenizer(chunk, param.pat, param.re_special_token)
+  result = chunk_to_pretokenizer(chunk, param.pat, param.re_special_token)
+  logging.debug(f"processing {param.idx}: {param.start}-{param.end} => {len(result)}")
+  return result
 
 
 def get_words_parallel(
@@ -114,11 +118,15 @@ def get_words_parallel(
   with open(filename, 'rb') as file:
     boundaries = find_chunk_boundaries(file, desired_num_chunks, split_special_token)
 
+  logging.debug(f"split boundaries: {len(boundaries)} {boundaries[-1]}")
+
   with Pool(parallel_count) as p:
-    words = p.map(_get_words_parallel_run, [GetWordsParam(filename=filename, start=a, end=b, remove_prefix=split_special_token, re_special_token=re_special_tokens) for (a, b) in zip(boundaries, boundaries[1:])])
+    words = p.map(_get_words_parallel_run, [GetWordsParam(idx=i, filename=filename, start=a, end=b, remove_prefix=split_special_token, re_special_token=re_special_tokens) for i, (a, b) in enumerate(zip(boundaries, boundaries[1:]))])
 
   final_words = Counter[str]()
   for w in words:
     final_words.update(w)
+
+  logging.info(f"proceed {filename} => {len(final_words)}")
 
   return final_words
