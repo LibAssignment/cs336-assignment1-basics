@@ -1,26 +1,46 @@
 from collections import Counter
-from typing import Self
+from collections.abc import Iterable
+from dataclasses import field, dataclass
+from typing import Self, TypeAlias
 import regex
 import heapq
 import os
 
 from .utils import chunk_to_pretokenizer, chunks_iter
 
+Idx: TypeAlias = int
+
+@dataclass
+class PreToken:
+  src: bytes
+  idxs: list[Idx]
+  freq: int
+
+@dataclass
+class PreMerge:
+  tp: tuple[Idx, Idx]
+  occurs_in: set[int] = field(default_factory=set)
+  freq: int = 0
+
 class Tokenizer:
   def __init__(self, words: dict[str, int], *, special_tokens: list[str] | None = None) -> None:
     self.special_tokens = [] if special_tokens is None else special_tokens
     special_tokens_len = len(self.special_tokens)
     self.vocabs = [s.encode() for s in self.special_tokens] + [bytes([c]) for c in range(256)]
-    self.merges = list[tuple[int, int]]()
-    self.current_tuples = Counter({tuple(i + special_tokens_len for i in k.encode()): v for k, v in words.items()})
+    self.merges = list[PreMerge]()
+    self.pre_merges = dict[tuple[Idx, Idx], PreMerge]()
+    self.current_tuples = [
+      PreToken(src=k.encode(), idxs=[special_tokens_len+c for c in k.encode()], freq=v)
+      for k, v in words.items()
+    ]
     self._tmp_merge = None
 
-  def display_tuples(self, t: dict[tuple[int, ...], int] | None = None):
+  def display_tuples(self, t: list[PreToken] | None = None):
     if t is None:
       t = self.current_tuples
-    return Counter({self.display_tuple(k): v for k, v in t.items()})
+    return Counter({self.display_tuple(k.idxs): k.freq for k in t})
 
-  def display_tuple(self, t: tuple[int, ...]) -> tuple[bytes, ...]:
+  def display_tuple(self, t: Iterable[Idx]) -> tuple[bytes, ...]:
     return tuple(self.vocabs[c] for c in t)
 
   @classmethod
@@ -42,16 +62,16 @@ class Tokenizer:
 
   @property
   def merges_display(self):
-    return [(self.vocabs[a], self.vocabs[b]) for a, b in self.merges]
+    return [(self.vocabs[m.tp[0]], self.vocabs[m.tp[1]]) for m in self.merges]
 
 
-  def merge_tuples(self, p: tuple[int, int]) :
+  def merge_tuples(self, m: PreMerge) :
     n = len(self.vocabs)
-    def merge_tuple(f: tuple[int, ...]) -> tuple[int, ...]:
+    def merge_tuple(f: list[Idx]) -> list[Idx]:
       i = 0
-      result = list[int]()
+      result = list[Idx]()
       while i < len(f):
-        if i < len(f) - 1 and f[i] == p[0] and f[i+1] == p[1]:
+        if i < len(f) - 1 and (f[i], f[i+1]) == m.tp:
           result.append(n)
           i += 2
         else:
@@ -59,28 +79,34 @@ class Tokenizer:
           i += 1
       if len(f) == len(result):
         return f
-      return tuple(result)
-    self.current_tuples = Counter({merge_tuple(k):v for k, v in self.current_tuples.items()})
-    self.vocabs.append(self.vocabs[p[0]] + self.vocabs[p[1]])
-    self.merges.append(p)
+      f.clear()
+      f.extend(result)
+      return f
+    # self.current_tuples = Counter({merge_tuple(k):v for k, v in self.current_tuples.items()})
+    for t in self.current_tuples:
+      t.idxs = merge_tuple(t.idxs)
+    self.vocabs.append(self.vocabs[m.tp[0]] + self.vocabs[m.tp[1]])
+    self.merges.append(m)
 
   def step(self):
-    tmp_merge = Counter[tuple[int, int]]()
-    for k, v in self.current_tuples.items():
-      if len(k) <= 1:
+    self.pre_merges.clear()
+    for i, t in enumerate(self.current_tuples):
+      if len(t.idxs) <= 1:
         continue
       # TODO: 0. utf8?
-      # TODO: 1. in+g, i+ng, and ing
       # TODO: 2. nnn => counter for b"nn"
-      for a, b in zip(k, k[1:]):
-        tmp_merge[(a, b)] = tmp_merge.get((a, b), 0) + v
-    self._tmp_merge = tmp_merge
-    most_common = heapq.nlargest(1, tmp_merge.items(), lambda i: (i[1], self.vocabs[i[0][0]], self.vocabs[i[0][1]]))
+      for tp in zip(t.idxs, t.idxs[1:]):
+        m = self.pre_merges.get(tp)
+        if m is None:
+          m = PreMerge(tp)
+          self.pre_merges[tp] = m
+        m.freq += t.freq
+        m.occurs_in.add(i)
+    most_common = heapq.nlargest(1, self.pre_merges.values(), lambda m: (m.freq, self.vocabs[m.tp[0]], self.vocabs[m.tp[1]]))
     current_merge = None
     if most_common:
       current_merge = most_common[0]
-      self.merge_tuples(current_merge[0])
-    # merges.append(current_merge)
+      self.merge_tuples(current_merge)
     return current_merge
 
 def train_bpe(
