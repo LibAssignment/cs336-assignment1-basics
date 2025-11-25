@@ -12,6 +12,8 @@ from typing import overload
 Idx: TypeAlias = int
 Vocabs: TypeAlias = dict[int, bytes]
 
+ENCODING = "utf-8"
+
 @dataclass
 class PreToken:
   src: bytes
@@ -22,6 +24,7 @@ class PreToken:
 class PreMerge:
   tp: tuple[Idx, Idx]
   content: tuple[bytes, bytes]
+  tar: Idx = -1
   occurs_in: set[int] = field(default_factory=set)
   freq: int = 0
 
@@ -30,12 +33,8 @@ class PreMerge:
     return cls(tp, (vocabs[tp[0]], vocabs[tp[1]]))
 
   @classmethod
-  def create_lookup(cls, content: tuple[bytes, bytes], *, vocabs: Vocabs):
-    def find_idx(vocabs: Vocabs, s: bytes):
-      for k, v in vocabs.items():
-        if v == s: return k
-      return -1
-    return cls((find_idx(vocabs, content[0]), find_idx(vocabs, content[1])), content)
+  def create_lookup(cls, content: tuple[bytes, bytes], *, vocab_rev: dict[bytes, int]):
+    return cls((vocab_rev[content[0]], vocab_rev[content[1]]), content, tar=vocab_rev.get(content[0]+content[1], -1))
 
   def add(self, i: int, v: int):
     self.occurs_in.add(i)
@@ -56,20 +55,33 @@ class Tokenizer:
   def __init__(self, vocabs: dict[int, bytes] | list[bytes], merges: list[tuple[bytes, bytes]], special_tokens: list[str] | None = None):
     self.vocabs = vocabs if isinstance(vocabs, dict) else {i: v for i,v in enumerate(vocabs)}
     self.max_vocab_idx = max(self.vocabs.keys())
-    self.merges = [PreMerge.create_lookup(tp, vocabs=self.vocabs) for tp in merges]
+    self.vocab_rev = {v: i for i, v in self.vocabs.items()}
+    self.merges = [PreMerge.create_lookup(tp, vocab_rev=self.vocab_rev) for tp in merges]
     self.pre_merges = dict[tuple[Idx, Idx], PreMerge]()
     self.current_tokens = list[PreToken]()
     self.special_tokens = [] if special_tokens is None else special_tokens
+    self.completed = False
+
+    self.finish()
 
   @classmethod
   def create_training(cls, words: dict[str, int], *, special_tokens: list[str] | None = None) -> Self:
-    vocabs = [bytes([c]) for c in range(256)] + [s.encode() for s in special_tokens or []]
+    vocabs = [bytes([c]) for c in range(256)] + [s.encode(ENCODING) for s in special_tokens or []]
     this = cls(vocabs, [], special_tokens=special_tokens)
     this.current_tokens.extend(
-      PreToken(src=k.encode(), idxs=list(k.encode()), freq=v)
+      PreToken(src=k.encode(ENCODING), idxs=list(k.encode(ENCODING)), freq=v)
       for k, v in words.items()
     )
     return this
+
+  def finish(self):
+    if self.completed:
+      return
+    self.vocab_rev = {v: i for i, v in self.vocabs.items()}
+    self.re_special_tokens = regex.compile('|'.join(map(regex.escape, self.special_tokens)))
+    for m in self.merges:
+      m.tar = self.vocab_rev[m.content[0] + m.content[1]]
+    self.completed = True
 
   @classmethod
   def from_files(cls, vocab_filepath: str | os.PathLike, merges_filepath: str | os.PathLike, special_tokens: list[str] | None = None):
@@ -101,7 +113,7 @@ class Tokenizer:
     final_words = get_words_parallel(
       input_path,
       desired_num_chunks=desired_num_chunks,
-      split_special_token=special_tokens[0].encode(),
+      split_special_token=special_tokens[0].encode(ENCODING),
       re_special_tokens=re_special_tokens
     )
 
@@ -146,8 +158,44 @@ class Tokenizer:
   def merges_display(self):
     return [(self.vocabs[m.tp[0]], self.vocabs[m.tp[1]]) for m in self.merges]
 
+  def encode_byte(self, b: int) -> Idx:
+    if rev := getattr(self, "_vocab_byte_rev", None):
+      return rev[b]
+    self._vocab_byte_rev = {i: self.vocab_rev[bytes([i])] for i in range(256)}
+    return self._vocab_byte_rev[b]
 
-  def merge_tuples(self, m: PreMerge) :
+  def encode(self, s: str) -> list[Idx]:
+    if not self.completed:
+      self.finish()
+    # TODO handle special_tokens
+    idxs = [self.encode_byte(i) for i in s.encode(ENCODING)]
+    if not idxs:
+      return idxs
+    idx_len = len(idxs)
+    nxt = [i+1 for i in range(idx_len)]
+    for m in self.merges:
+      i = 0
+      while True:
+        j = nxt[i]
+        if j >= idx_len:
+          break
+        if (idxs[i], idxs[j]) == m.tp:
+          idxs[i] = m.tar
+          nxt[i] = nxt[j]
+        i = nxt[i]
+    i = 0
+    result = list[Idx]()
+    while i < idx_len:
+      result.append(idxs[i])
+      i = nxt[i]
+    return result
+
+  def decode(self, ids: list[int]) -> str:
+    bstr = b"".join(self.vocabs[i] for i in ids)
+    return bstr.decode(ENCODING, errors="replace")
+
+  # below all training related
+  def merge_tuples(self, m: PreMerge):
     n = len(self.vocabs)
     def merge_tuple(f: list[Idx]) -> list[Idx]:
       i = 0
@@ -197,6 +245,7 @@ class Tokenizer:
     if current_merge is None:
       return
     # occurs_in = sorted(current_merge.occurs_in)
+    self.completed = False
     for i in current_merge.occurs_in:
       t = self.current_tokens[i]
       for tp in zip(t.idxs, t.idxs[1:]):
