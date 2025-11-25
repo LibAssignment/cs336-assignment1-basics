@@ -6,7 +6,7 @@ import regex
 import heapq
 import os
 
-from .utils import chunk_to_pretokenizer, chunks_iter
+from .utils import chunk_to_pretokenizer, chunks_iter, get_words, get_words_parallel
 
 Idx: TypeAlias = int
 
@@ -55,12 +55,12 @@ class Tokenizer:
   def load_file(cls, input_path: str | os.PathLike, special_tokens: list[str], desired_num_chunks=1000) -> Self:
     re_special_tokens = '|'.join(regex.escape(s) for s in special_tokens)
 
-    with open(input_path, 'rb') as f:
-      final_words = Counter[str]()
-      for chunk in chunks_iter(f, desired_num_chunks=desired_num_chunks, split_special_token=special_tokens[0].encode()):
-        for c in regex.split(re_special_tokens, chunk):
-          words = chunk_to_pretokenizer(c)
-          final_words += words
+    final_words = get_words_parallel(
+      input_path,
+      desired_num_chunks=desired_num_chunks,
+      split_special_token=special_tokens[0].encode(),
+      re_special_tokens=re_special_tokens
+    )
 
     return cls(final_words, special_tokens=special_tokens)
 
