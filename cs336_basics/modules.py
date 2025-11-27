@@ -125,6 +125,35 @@ class RoPE(Module):
     return einsum(x, m, "... k, ... k2 k -> ... k2")
 
 
+class Softmax(Module):
+  def __init__(self, dim = -1) -> None:
+    self.dim = dim
+  def forward(self, x: Float[Tensor, "... d"]):
+    return _softmax(x, dim=self.dim)
+
+
+class Attention(Module):
+  def __init__(self, d_embed: int, d_q: int, d_k: int, d_v: int, device=None, dtype=None):
+    self.d_embed = d_embed
+    self.d_q = d_q
+    self.d_k = d_k
+    self.d_v = d_v
+    self.linear_q = Linear(d_embed, d_q)
+    self.linear_k = Linear(d_embed, d_k)
+    self.linear_v = Linear(d_embed, d_v)
+
+  def forward(
+      self,
+      x_input: Float[Tensor, "... queries d_embed"],
+      y_input: Float[Tensor, "... values d_embed"],
+      mask: Bool[Tensor, " ... queries keys"] | None = None,
+  ) -> Float[Tensor, "... queries d_v"]:
+    Q = self.linear_q.forward(x_input)
+    K = self.linear_k.forward(y_input)
+    V = self.linear_v.forward(y_input)
+    return _scaled_dot_product_attention(Q, K, V, mask)
+
+
 def _linear(
   d_in: int,
   d_out: int,
@@ -157,3 +186,21 @@ def _rope_rotate(Theta: float, n: int, k: int) -> Float[Tensor, "d_n d_k d_k"]:
   idx = rearrange(idx, "group t p -> p (t group)")
   v = rearrange(v, "group t -> (t group)")
   return torch.sparse_coo_tensor(idx, v, size=(n, k, k))
+
+def _softmax(x: Float[Tensor, "..."], dim = -1) -> Float[Tensor, "..."]:
+  x_max = torch.max(x, dim=dim, keepdim=True).values.detach()
+  x = (x - x_max).exp()
+  return x / x.sum(dim=dim, keepdim=True)
+
+def _scaled_dot_product_attention(
+    Q: Float[Tensor, " ... queries d_k"],
+    K: Float[Tensor, " ... keys d_k"],
+    V: Float[Tensor, " ... values d_v"],
+    mask: Bool[Tensor, " ... queries keys"] | None = None,
+) -> Float[Tensor, " ... queries d_v"]:
+  d_k = torch.tensor(Q.shape[-1])
+  atten = einsum(Q, K, "... queries d_k, ... keys d_k -> ... queries keys")
+  if mask is not None:
+    atten = atten.masked_fill(~mask, -torch.inf)
+  atten = _softmax(atten / d_k.sqrt(), dim=-1)
+  return einsum(atten, V, "... queries values, ... values d_v -> ... queries d_v")

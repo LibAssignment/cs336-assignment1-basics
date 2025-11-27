@@ -53,17 +53,35 @@ NOTE: there's performance issue with the current implementation.
 == Problem (tokenizer_experiments): Experiments with tokenizers
 
 = Transformer Language Model Architecture
-- Problem (linear): Implementing the linear module
-- Problem (embedding): Implement the embedding module
-- Problem (rmsnorm): Root Mean Square Layer Normalization
+=== Problem (linear): Implementing the linear module
+```python
+einsum(x, w, "... d_in, d_out d_in -> ... d_out")
+```
+=== Problem (embedding): Implement the embedding module
+```python
+w[x]
+```
+=== Problem (rmsnorm): Root Mean Square Layer Normalization
   $ "RMSNorm"(a_i) &= a_i / "RMS"(a) g_i \
     "RMS"(a) &= sqrt(1/d sum_1^d a_i^2 + epsilon) $
-- Problem (positionwise_feedforward): Implement the position-wise feed-forward network
+=== Problem (positionwise_feedforward): Implement the position-wise feed-forward network
   $ "ReLU"(x) &= max(0, x) \
     "SiLU"(x) &= x dot sigma(x) = x / (1+e^(-x)) \
     "GLU"(x; W, V, sigma) &= sigma(W x) dot.o (V x) \
     "FFN"(x; W_1, W_2, V, sigma) &= W_2 dot "GLU"(x; W_1, V, sigma) $
-- Problem (rope): Implement RoPE
-  $ R_{i,k} &= mat(cos theta_(i,k), -sin theta_(i,k);
+=== Problem (rope): Implement RoPE
+  $ R_(i,k) &= mat(cos theta_(i,k), -sin theta_(i,k);
                    sin theta_(i,k),  cos theta_(i,k);) \
     theta_(i,k) &= i / Theta^((2k-2)/d) $
+Notes:
+1. $i$ in $R_(i,k)$ starts from 0, not 1.
+2. Be careful with the order of index in the RoPE matrix multiplication.
+3.
+=== Problem (softmax): Implement softmax
+Notes:
+1. `x - x_max` is used to prevent overflow.
+2. `x_max = torch.max(x, dim=self.dim, keepdim=True).values.detach()`
+=== Problem (scaled_dot_product_attention): Implement scaled dot-product attention
+Notes:
+1. `1/sqrt(d_k)`
+2. `x.masked_fill(~mask, -torch.inf)`

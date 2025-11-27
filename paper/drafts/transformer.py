@@ -54,3 +54,10 @@ torch.cat([_ks, _krs])
 # %%
 torch.sparse_coo_tensor(torch.tensor([[1,1], [2,2], [3, 3]]).T, [3, 3, 3], (10, 10))
 # %%
+import torch
+mask = torch.tensor([True, False])
+x = torch.randn(2)
+x_masked = x.masked_fill(~mask, -torch.inf)
+x_masked
+
+# %%
