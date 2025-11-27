@@ -1,3 +1,4 @@
+from einops import einsum
 import torch.nn
 from torch.nn import Module, Parameter
 import numpy.typing as npt
@@ -45,7 +46,7 @@ class RMSNorm(Module):
     self.d_model = d_model
     self.eps = eps
     self.weight = Parameter(
-      torch.ones(d_model)
+      torch.ones(d_model, **kwargs)
     )
 
   def forward(self, x: Float[Tensor, " ... "]):
@@ -54,6 +55,48 @@ class RMSNorm(Module):
     rms = (x.pow(2).mean(dim=-1, keepdim=True) + self.eps).sqrt()
     result = x / rms * self.weight
     return result.to(in_dtype)
+
+
+class Relu(Module):
+  def forward(self, x: Tensor):
+    return torch.max(x, torch.tensor(0))
+
+
+class SiLU(Module):
+  def forward(self, x: Tensor):
+    return x / (1 + (-x).exp())
+
+
+class GatedLU(Module):
+  def __init__(self, d_input: int, d_output: int, sig: Module, device=None, dtype=None):
+    kwargs = {"device": device, "dtype": dtype}
+    super().__init__()
+    self.d_input = d_input
+    self.d_output = d_output
+    self.sig = sig
+    self.weight = Parameter(
+      torch.empty(self.d_output, self.d_input, **kwargs)
+    )
+    self.v = Parameter(
+      torch.empty(self.d_output, self.d_input, **kwargs)
+    )
+    torch.nn.init.trunc_normal_(self.weight)
+    torch.nn.init.trunc_normal_(self.v)
+
+  def forward(self, x: Float[Tensor, '... d_input']):
+    x1 = torch.einsum("...i,ji->...j", x, self.weight)
+    g = torch.einsum("...i,ji->...j", x, self.v)
+    return self.sig(x1) * g
+
+
+class FFN(Module):
+  def __init__(self, d_model: int, d_hidden: int, sig: Module, device=None, dtype=None):
+    super().__init__()
+    self.gated_lu = GatedLU(d_model, d_hidden, sig, device=device, dtype=dtype)
+    self.linear = Linear(d_hidden, d_model, device=device, dtype=dtype)
+
+  def forward(self, x: Float[Tensor, "... d_input"]):
+    return self.linear(self.gated_lu(x))
 
 
 def _linear(
