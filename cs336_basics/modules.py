@@ -1,4 +1,4 @@
-from einops import einsum
+from einops import einsum, rearrange, repeat
 import torch.nn
 from torch.nn import Module, Parameter
 import numpy.typing as npt
@@ -19,6 +19,7 @@ class Linear(Module):
     torch.nn.init.trunc_normal_(self.weight)
 
   def forward(self, in_features: Float[Tensor, " ... d_in"]):
+    # einsum(in_features, self.weight, "... d_in, d_out d_in -> ... d_out")
     return _linear(self.d_in, self.d_out, self.weight, in_features)
 
 
@@ -63,11 +64,18 @@ class Relu(Module):
 
 
 class SiLU(Module):
+  """
+  $"SiLU"(x) = x dot sigma(x) = x / (1+e^(-x))$
+  """
   def forward(self, x: Tensor):
     return x / (1 + (-x).exp())
 
 
 class GatedLU(Module):
+  """
+  $"GLU"(x, W_1, V; sigma) = sigma(W_1 x) dot.o (V x)$
+  """
+  __constants__ = ["d_input", "d_output"]
   def __init__(self, d_input: int, d_output: int, sig: Module, device=None, dtype=None):
     kwargs = {"device": device, "dtype": dtype}
     super().__init__()
@@ -99,6 +107,24 @@ class FFN(Module):
     return self.linear(self.gated_lu(x))
 
 
+class RoPE(Module):
+  __constants__ = ["theta", "d_k", "d_n"]
+  def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None, dtype=None):
+    kwargs = {"device": device, "dtype": dtype}
+    super().__init__()
+    self.Theta = theta
+    self.d_k = d_k
+    self.d_n = max_seq_len
+    self.R = _rope_rotate(self.Theta, self.d_n, self.d_k) \
+      .to(device=device, dtype=dtype).to_dense()
+
+  def forward(self, x: Float[Tensor, "... seq_len d_k"], token_positions: Int[Tensor, "... seq_len"]):
+    assert x.shape[-1] == self.d_k
+    assert x.shape[-2] == token_positions.shape[-1]
+    m = self.R[token_positions]
+    return einsum(x, m, "... k, ... k2 k -> ... k2")
+
+
 def _linear(
   d_in: int,
   d_out: int,
@@ -108,3 +134,26 @@ def _linear(
   assert weights.shape == (d_out, d_in)
   assert in_features.shape[-1] == d_in
   return in_features @ weights.T
+
+def _rope_rotate(Theta: float, n: int, k: int) -> Float[Tensor, "d_n d_k d_k"]:
+  """
+  $ R_{i,k} &= mat(cos theta_(i,k), -sin theta_(i,k);
+                   sin theta_(i,k),  cos theta_(i,k);) \
+    theta_(i,k) &= i / Theta^((2k-2)/d) $
+  """
+  _is = torch.arange(n)
+  _ks = torch.arange(k)
+  _krs = _ks + 1 - (_ks % 2) * 2
+  thetas = einsum(_is, torch.pow(Theta, -_ks[::2] / k), "n, k -> n k")
+  thetas = rearrange(thetas, "n k -> (n k)")
+  # idx goes like (0, 0), (1, 1), ... (d_k-1, d_k-1)
+  _k_idx = repeat(_ks, "k -> (n k) 1", n=n)
+  _kr_idx = repeat(_krs, "k -> (n k) 1", n=n)
+  _i_idx = repeat(_is, "n -> (n k) 1", k=k)
+  idx1 = torch.cat([_i_idx, _k_idx, _k_idx], dim=-1)
+  idx2 = torch.cat([_i_idx, _k_idx, _kr_idx], dim=-1)
+  idx = torch.stack([idx1[::2], idx2[::2], idx2[1::2], idx1[1::2]])
+  v = torch.stack([thetas.cos(), -thetas.sin(), thetas.sin(), thetas.cos()])
+  idx = rearrange(idx, "group t p -> p (t group)")
+  v = rearrange(v, "group t -> (t group)")
+  return torch.sparse_coo_tensor(idx, v, size=(n, k, k))

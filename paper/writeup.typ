@@ -51,3 +51,19 @@ Done, see: `file:cs336_basics/tokenizer.py`
 NOTE: there's performance issue with the current implementation.
 
 == Problem (tokenizer_experiments): Experiments with tokenizers
+
+= Transformer Language Model Architecture
+- Problem (linear): Implementing the linear module
+- Problem (embedding): Implement the embedding module
+- Problem (rmsnorm): Root Mean Square Layer Normalization
+  $ "RMSNorm"(a_i) &= a_i / "RMS"(a) g_i \
+    "RMS"(a) &= sqrt(1/d sum_1^d a_i^2 + epsilon) $
+- Problem (positionwise_feedforward): Implement the position-wise feed-forward network
+  $ "ReLU"(x) &= max(0, x) \
+    "SiLU"(x) &= x dot sigma(x) = x / (1+e^(-x)) \
+    "GLU"(x; W, V, sigma) &= sigma(W x) dot.o (V x) \
+    "FFN"(x; W_1, W_2, V, sigma) &= W_2 dot "GLU"(x; W_1, V, sigma) $
+- Problem (rope): Implement RoPE
+  $ R_{i,k} &= mat(cos theta_(i,k), -sin theta_(i,k);
+                   sin theta_(i,k),  cos theta_(i,k);) \
+    theta_(i,k) &= i / Theta^((2k-2)/d) $
