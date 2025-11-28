@@ -37,7 +37,6 @@ class _AdamWParams(TypedDict):
   beta2: float
   epsilon: float
   lamda: float
-  step_count: int
 
 class _AdamWGroupParams(_AdamWParams, _GroupParams):
   pass
@@ -45,6 +44,7 @@ class _AdamWGroupParams(_AdamWParams, _GroupParams):
 class _AdamState(TypedDict):
   m: NotRequired[Tensor]
   v: NotRequired[Tensor]
+  step_count: NotRequired[Tensor]
 
 class AdamW(Optimizer):
   def __init__(self, params: ParamsT, lr: float = 0.001, weight_decay: float = 0.1, betas: tuple[float, float] = (0.9, 0.999), eps: float = 1e-8):
@@ -54,7 +54,6 @@ class AdamW(Optimizer):
       beta2 = betas[1],
       epsilon = eps,
       lamda = weight_decay,
-      step_count = 0,
     )
     super().__init__(params, cast(dict, defaults))
 
@@ -62,15 +61,15 @@ class AdamW(Optimizer):
     for group in cast(list[_AdamWGroupParams], self.param_groups):
       beta1 = group["beta1"]
       beta2 = group["beta2"]
-      step_count = group['step_count'] + 1
       alpha = group['alpha']
       epsilon = group['epsilon']
       decay = group['lamda']
-      alpha_t = alpha * math.sqrt(1 - beta2**step_count) / (1 - beta1**step_count)
       for param in group["params"]:
         if param.grad is None:
           continue
         state = cast(_AdamState, self.state[param])
+        step_count = state.get('step_count', torch.tensor(0)) + 1
+        alpha_t = alpha * (1 - beta2**step_count).sqrt() / (1 - beta1**step_count)
         grad = param.grad
         m = state.get('m', torch.zeros_like(param))
         v = state.get('v', torch.zeros_like(param))
@@ -78,7 +77,7 @@ class AdamW(Optimizer):
         v = beta2 * v + (1 - beta2) * (grad * grad)
         state['m'] = m
         state['v'] = v
+        state['step_count'] = step_count
 
         param.data -= alpha_t * m / (v.sqrt() + epsilon)
         param.data *= 1 - alpha * decay
-      group['step_count'] = step_count

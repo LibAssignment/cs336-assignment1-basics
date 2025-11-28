@@ -81,10 +81,15 @@ _cross_entory(torch.randn(2, 4), torch.tensor([2, 3]))
 _cross_entory(torch.randn(2, 3, 4), torch.randint(0, 3, (2, 3)))
 
 # %%
+import torch
 from cs336_basics.optimizer import SGD, AdamW
 from cs336_basics.modules import Linear
 m = Linear(5, 3)
 s = AdamW(m.parameters(), lr=0.001, weight_decay=0.9)
 print(s)
+beta1 = s.defaults['beta1']
+beta2 = s.defaults['beta2']
+steps = torch.arange(10000) + 1
+(1 - beta1 ** steps).sqrt() / (1 - beta2 ** steps)
 
 # %%

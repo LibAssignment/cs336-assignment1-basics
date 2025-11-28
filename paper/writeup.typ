@@ -161,7 +161,9 @@ Notes:
 1. `x.gather(dim=dim, index=target.unsqueeze(dim)).squeeze(dim)`
 2. The tests requires `mean` if batch is present.
 === Problem (adamw): Implement AdamW
-
+Notes:
+1. `step_count` should start from 1 to avoid zero division, and stored in state
+2. `alpha_t` would initially `~300` times of `alpha` and decay to `alpha` gradually (in 10000 steps).
 
 === Problem (learning_rate_tuning): Tuning the learning rate
 TODO
