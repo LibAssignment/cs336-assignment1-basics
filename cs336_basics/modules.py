@@ -133,25 +133,64 @@ class Softmax(Module):
 
 
 class Attention(Module):
-  def __init__(self, d_embed: int, d_q: int, d_k: int, d_v: int, device=None, dtype=None):
+  __constants__ = ["d_embed", "d_k", "d_v"]
+  def __init__(self, d_embed: int, d_k: int, d_v: int, device=None, dtype=None):
+    kwargs = {"device": device, "dtype": dtype}
+    super().__init__()
     self.d_embed = d_embed
-    self.d_q = d_q
     self.d_k = d_k
     self.d_v = d_v
-    self.linear_q = Linear(d_embed, d_q)
-    self.linear_k = Linear(d_embed, d_k)
-    self.linear_v = Linear(d_embed, d_v)
+    self.linear_q = Linear(d_embed, d_k, **kwargs)
+    self.linear_k = Linear(d_embed, d_k, **kwargs)
+    self.linear_v = Linear(d_embed, d_v, **kwargs)
 
   def forward(
       self,
-      x_input: Float[Tensor, "... queries d_embed"],
-      y_input: Float[Tensor, "... values d_embed"],
+      q_input: Float[Tensor, "... queries d_embed"],
+      v_input: Float[Tensor, "... keys d_embed"],
       mask: Bool[Tensor, " ... queries keys"] | None = None,
   ) -> Float[Tensor, "... queries d_v"]:
-    Q = self.linear_q.forward(x_input)
-    K = self.linear_k.forward(y_input)
-    V = self.linear_v.forward(y_input)
+    Q = self.linear_q.forward(q_input) # Float[Tensor, " ... queries d_k"]
+    K = self.linear_k.forward(v_input) # Float[Tensor, " ... keys d_k"]
+    V = self.linear_v.forward(v_input) # Float[Tensor, " ... keys d_v"]
     return _scaled_dot_product_attention(Q, K, V, mask)
+
+
+class MultiHeadAttention(Module):
+  __constants__ = ["d_embed", "d_k", "d_v", "n_heads", "auto_mask"]
+  def __init__(self, d_model: int, num_heads: int, d_k: int, d_v: int, mask: bool = True, device=None, dtype=None):
+    kwargs = {"device": device, "dtype": dtype}
+    super().__init__()
+    self.d_embed = d_model
+    self.d_k = d_k
+    self.d_v = d_v
+    self.n_heads = num_heads
+    self.auto_mask = mask
+    self.linear_q = Linear(d_model, d_k, **kwargs)
+    self.linear_k = Linear(d_model, d_k, **kwargs)
+    self.linear_v = Linear(d_model, d_v, **kwargs)
+    self.linear_o = Linear(d_v, d_model, **kwargs)
+
+  def forward(
+      self,
+      q_input: Float[Tensor, "... queries d_embed"],
+      v_input: Float[Tensor, "... values d_embed"],
+      mask: Bool[Tensor, " ... queries keys"] | None = None,
+  ) -> Float[Tensor, "... queries d_v"]:
+    Q = self.linear_q.forward(q_input) # Float[Tensor, " ... queries d_k"]
+    K = self.linear_k.forward(v_input) # Float[Tensor, " ... keys d_k"]
+    V = self.linear_v.forward(v_input) # Float[Tensor, " ... keys d_v"]
+    Q = rearrange(Q, "... queries (h d_k) -> ... h queries d_k", h=self.n_heads)
+    K = rearrange(K, "... keys (h d_k) -> ... h keys d_k", h=self.n_heads)
+    V = rearrange(V, "... keys (h d_v) -> ... h keys d_v", h=self.n_heads)
+    if mask is None and self.auto_mask:
+      d_queries = q_input.shape[-2]
+      d_keys = q_input.shape[-2]
+      assert d_queries == d_keys
+      mask = ~torch.triu(torch.ones(d_queries, d_keys, dtype=torch.bool), diagonal=1)
+    result = _scaled_dot_product_attention(Q, K, V, mask)
+    result = rearrange(result, "... h queries d_v -> ... queries (h d_v)")
+    return self.linear_o.forward(result)
 
 
 def _linear(
@@ -162,7 +201,7 @@ def _linear(
 ):
   assert weights.shape == (d_out, d_in)
   assert in_features.shape[-1] == d_in
-  return in_features @ weights.T
+  return einsum(in_features, weights, "... d_in, d_out d_in -> ... d_out")
 
 def _rope_rotate(Theta: float, n: int, k: int) -> Float[Tensor, "d_n d_k d_k"]:
   """
@@ -195,12 +234,12 @@ def _softmax(x: Float[Tensor, "..."], dim = -1) -> Float[Tensor, "..."]:
 def _scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
     K: Float[Tensor, " ... keys d_k"],
-    V: Float[Tensor, " ... values d_v"],
+    V: Float[Tensor, " ... keys d_v"],
     mask: Bool[Tensor, " ... queries keys"] | None = None,
 ) -> Float[Tensor, " ... queries d_v"]:
-  d_k = torch.tensor(Q.shape[-1])
+  d_k = torch.tensor(K.shape[-1])
   atten = einsum(Q, K, "... queries d_k, ... keys d_k -> ... queries keys")
   if mask is not None:
     atten = atten.masked_fill(~mask, -torch.inf)
   atten = _softmax(atten / d_k.sqrt(), dim=-1)
-  return einsum(atten, V, "... queries values, ... values d_v -> ... queries d_v")
+  return einsum(atten, V, "... queries keys, ... keys d_v -> ... queries d_v")

@@ -85,3 +85,6 @@ Notes:
 Notes:
 1. `1/sqrt(d_k)`
 2. `x.masked_fill(~mask, -torch.inf)`
+=== Problem (multihead_self_attention): Implement causal multi-head self-attention
+Notes:
+1. set `mask` if non-present

@@ -61,3 +61,6 @@ x_masked = x.masked_fill(~mask, -torch.inf)
 x_masked
 
 # %%
+~torch.triu(torch.ones(3, 3, dtype=torch.bool), diagonal=1)
+
+# %%

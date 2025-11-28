@@ -97,9 +97,9 @@ def run_swiglu(
 
     from cs336_basics.modules import FFN, SiLU
     m = FFN(d_model, d_ff, sig=SiLU())
-    m.gated_lu.weight.data = w1_weight
-    m.gated_lu.v.data = w3_weight
-    m.linear.weight.data = w2_weight
+    _set_weight(m.gated_lu.weight, w1_weight)
+    _set_weight(m.gated_lu.v, w3_weight)
+    _set_weight(m.linear.weight, w2_weight)
     return m.forward(in_features)
 
 
@@ -157,7 +157,16 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+
+    from cs336_basics.modules import MultiHeadAttention
+    d_k = k_proj_weight.shape[-2]
+    d_v = v_proj_weight.shape[-2]
+    m = MultiHeadAttention(d_model, num_heads, d_k, d_v)
+    _set_weight(m.linear_q.weight, q_proj_weight)
+    _set_weight(m.linear_k.weight, k_proj_weight)
+    _set_weight(m.linear_v.weight, v_proj_weight)
+    _set_weight(m.linear_o.weight, o_proj_weight)
+    return m.forward(in_features, in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -626,3 +635,8 @@ def run_train_bpe(
     """
     from cs336_basics.tokenizer import train_bpe
     return train_bpe(input_path, vocab_size, special_tokens)
+
+
+def _set_weight(param: torch.nn.Parameter, data: torch.Tensor):
+    assert param.shape == data.shape
+    param.data = data
