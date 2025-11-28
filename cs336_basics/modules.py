@@ -1,3 +1,4 @@
+from typing import Any, TypedDict
 from einops import einsum, rearrange, repeat
 import torch.nn
 from torch.nn import Module, Parameter
@@ -6,10 +7,14 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
+class DeviceParams(TypedDict):
+  device: Any
+  dtype: Any
+
 class Linear(Module):
   __constants__ = ["d_in", "d_out"]
   def __init__(self, in_features: int, out_features: int, device=None, dtype=None):
-    kwargs = {"device": device, "dtype": dtype}
+    kwargs = DeviceParams(device=device, dtype=dtype)
     super().__init__()
     self.d_in = in_features
     self.d_out = out_features
@@ -26,7 +31,7 @@ class Linear(Module):
 class Embedding(Module):
   __constants__ = ["n_embed", "d_embed"]
   def __init__(self, num_embeddings: int, embedding_dim: int, device=None, dtype=None):
-    kwargs = {"device": device, "dtype": dtype}
+    kwargs = DeviceParams(device=device, dtype=dtype)
     super().__init__()
     self.n_embed = num_embeddings
     self.d_embed = embedding_dim
@@ -42,7 +47,7 @@ class Embedding(Module):
 class RMSNorm(Module):
   __constants__ = ["d_model", "eps"]
   def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
-    kwargs = {"device": device, "dtype": dtype}
+    kwargs = DeviceParams(device=device, dtype=dtype)
     super().__init__()
     self.d_model = d_model
     self.eps = eps
@@ -77,7 +82,7 @@ class GatedLU(Module):
   """
   __constants__ = ["d_input", "d_output"]
   def __init__(self, d_input: int, d_output: int, sig: Module, device=None, dtype=None):
-    kwargs = {"device": device, "dtype": dtype}
+    kwargs = DeviceParams(device=device, dtype=dtype)
     super().__init__()
     self.d_input = d_input
     self.d_output = d_output
@@ -110,7 +115,7 @@ class FFN(Module):
 class RoPE(Module):
   __constants__ = ["theta", "d_k", "d_n"]
   def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None, dtype=None):
-    kwargs = {"device": device, "dtype": dtype}
+    kwargs = DeviceParams(device=device, dtype=dtype)
     super().__init__()
     self.Theta = theta
     self.d_k = d_k
@@ -134,34 +139,10 @@ class Softmax(Module):
     return _softmax(x, dim=self.dim)
 
 
-class Attention(Module):
-  __constants__ = ["d_embed", "d_k", "d_v"]
-  def __init__(self, d_embed: int, d_k: int, d_v: int, device=None, dtype=None):
-    kwargs = {"device": device, "dtype": dtype}
-    super().__init__()
-    self.d_embed = d_embed
-    self.d_k = d_k
-    self.d_v = d_v
-    self.linear_q = Linear(d_embed, d_k, **kwargs)
-    self.linear_k = Linear(d_embed, d_k, **kwargs)
-    self.linear_v = Linear(d_embed, d_v, **kwargs)
-
-  def forward(
-      self,
-      q_input: Float[Tensor, "... queries d_embed"],
-      v_input: Float[Tensor, "... keys d_embed"],
-      mask: Bool[Tensor, " ... queries keys"] | None = None,
-  ) -> Float[Tensor, "... queries d_v"]:
-    Q = self.linear_q.forward(q_input) # Float[Tensor, " ... queries d_k"]
-    K = self.linear_k.forward(v_input) # Float[Tensor, " ... keys d_k"]
-    V = self.linear_v.forward(v_input) # Float[Tensor, " ... keys d_v"]
-    return _scaled_dot_product_attention(Q, K, V, mask)
-
-
 class MultiHeadAttention(Module):
   __constants__ = ["d_embed", "d_k", "d_v", "n_heads", "auto_mask"]
   def __init__(self, d_model: int, d_k: int, d_v: int, num_heads: int = 1, pos_embed: Module | None = None, mask: bool = True, device=None, dtype=None):
-    kwargs = {"device": device, "dtype": dtype}
+    kwargs = DeviceParams(device=device, dtype=dtype)
     super().__init__()
     self.d_embed = d_model
     self.d_k = d_k
@@ -169,10 +150,10 @@ class MultiHeadAttention(Module):
     self.n_heads = num_heads
     self.auto_mask = mask
     self.pos_embed = pos_embed
-    self.linear_q = Linear(d_model, d_k, **kwargs)
-    self.linear_k = Linear(d_model, d_k, **kwargs)
-    self.linear_v = Linear(d_model, d_v, **kwargs)
-    self.linear_o = Linear(d_v, d_model, **kwargs)
+    self.linear_q = Linear(d_model, d_k*num_heads, **kwargs)
+    self.linear_k = Linear(d_model, d_k*num_heads, **kwargs)
+    self.linear_v = Linear(d_model, d_v*num_heads, **kwargs)
+    self.linear_o = Linear(d_v*num_heads, d_model, **kwargs)
 
   def forward(
       self,
@@ -192,13 +173,36 @@ class MultiHeadAttention(Module):
       Q: Tensor = self.pos_embed(Q)
       K: Tensor = self.pos_embed(K)
     if mask is None and self.auto_mask:
-      d_queries = q_input.shape[-2]
-      d_keys = q_input.shape[-2]
-      assert d_queries == d_keys
-      mask = ~torch.triu(torch.ones(d_queries, d_keys, dtype=torch.bool), diagonal=1)
+      n_queries = q_input.shape[-2]
+      n_keys = q_input.shape[-2]
+      assert n_queries == n_keys
+      mask = ~torch.triu(torch.ones(n_queries, n_keys, dtype=torch.bool), diagonal=1)
     result = _scaled_dot_product_attention(Q, K, V, mask)
     result = rearrange(result, "... h queries d_v -> ... queries (h d_v)")
     return self.linear_o.forward(result)
+
+
+class TransformerBlock(Module):
+  def __init__(self, d_model: int, d_ff: int, d_k: int, d_v: int = 0, sig: Module | None = None, pos_embed: Module | None = None, num_heads: int = 1, device=None, dtype=None):
+    kwargs = DeviceParams(device=device, dtype=dtype)
+    super().__init__()
+    d_v = d_v or d_k
+    self.d_model = d_model
+    self.d_ff = d_ff
+    self.d_k = d_k
+    self.d_v = d_v
+    self.n_heads = num_heads
+    if sig is None:
+      sig = SiLU()
+
+    self.attn = MultiHeadAttention(d_model=d_model, d_k=d_k, d_v=d_v, pos_embed=pos_embed, num_heads=num_heads, mask=True, **kwargs)
+    self.norm1 = RMSNorm(d_model=d_model, **kwargs)
+    self.ffn = FFN(d_model=d_model, d_hidden=d_ff, sig=sig, **kwargs)
+    self.norm2 = RMSNorm(d_model=d_model, **kwargs)
+
+  def forward(self, x: Tensor):
+    attn = x + self.attn.forward(self.norm1.forward(x))
+    return attn + self.ffn.forward(self.norm2.forward(attn))
 
 
 def _linear(

@@ -159,8 +159,8 @@ def run_multihead_self_attention(
     """
 
     from cs336_basics.modules import MultiHeadAttention
-    d_k = k_proj_weight.shape[-2]
-    d_v = v_proj_weight.shape[-2]
+    d_k = d_model // num_heads
+    d_v = d_model // num_heads
     m = MultiHeadAttention(d_model=d_model, d_k=d_k, d_v=d_v, num_heads=num_heads)
     _set_weight(m.linear_q.weight, q_proj_weight)
     _set_weight(m.linear_k.weight, k_proj_weight)
@@ -208,9 +208,9 @@ def run_multihead_self_attention_with_rope(
     """
 
     from cs336_basics.modules import RoPE, MultiHeadAttention
-    d_k = k_proj_weight.shape[-2]
-    d_v = v_proj_weight.shape[-2]
-    rope = RoPE(theta=theta, d_k=d_k // num_heads, max_seq_len=max_seq_len)
+    d_k = d_model // num_heads
+    d_v = d_model // num_heads
+    rope = RoPE(theta=theta, d_k=d_k, max_seq_len=max_seq_len)
     m = MultiHeadAttention(d_model=d_model, d_k=d_k, d_v=d_v, num_heads=num_heads, pos_embed=rope)
     _set_weight(m.linear_q.weight, q_proj_weight)
     _set_weight(m.linear_k.weight, k_proj_weight)
@@ -314,7 +314,21 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+
+    from cs336_basics.modules import TransformerBlock, RoPE
+    d_k = d_v = d_model // num_heads
+    rope = RoPE(theta=theta, d_k=d_k, max_seq_len=max_seq_len)
+    m = TransformerBlock(d_model=d_model, d_ff=d_ff, d_k=d_k, d_v=d_v, num_heads=num_heads, pos_embed=rope)
+    _set_weight(m.attn.linear_q.weight, weights['attn.q_proj.weight'])
+    _set_weight(m.attn.linear_k.weight, weights['attn.k_proj.weight'])
+    _set_weight(m.attn.linear_v.weight, weights['attn.v_proj.weight'])
+    _set_weight(m.attn.linear_o.weight, weights['attn.output_proj.weight'])
+    _set_weight(m.norm1.weight, weights['ln1.weight'])
+    _set_weight(m.ffn.gated_lu.weight, weights['ffn.w1.weight'])
+    _set_weight(m.ffn.gated_lu.v, weights['ffn.w3.weight'])
+    _set_weight(m.ffn.linear.weight, weights['ffn.w2.weight'])
+    _set_weight(m.norm2.weight, weights['ln2.weight'])
+    return m.forward(in_features)
 
 
 def run_transformer_lm(

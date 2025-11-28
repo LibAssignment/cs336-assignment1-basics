@@ -76,7 +76,7 @@ w[x]
 Notes:
 1. $i$ in $R_(i,k)$ starts from 0, not 1.
 2. Be careful with the order of index in the RoPE matrix multiplication.
-3.
+3. $Theta$ should be inverse, or use $-(2k-2)/d$ in `pow`
 === Problem (softmax): Implement softmax
 Notes:
 1. `x - x_max` is used to prevent overflow.
@@ -87,4 +87,7 @@ Notes:
 2. `x.masked_fill(~mask, -torch.inf)`
 === Problem (multihead_self_attention): Implement causal multi-head self-attention
 Notes:
-1. set `mask` if non-present
+1. $W_o$ applied to concatenated output
+2. set `mask` if non-present
+3. allow `rope` which applied on $Q$ and $K$
+=== Problem (transformer_block): Implement the Transformer block
