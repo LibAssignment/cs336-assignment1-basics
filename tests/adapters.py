@@ -410,7 +410,24 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+
+    from cs336_basics.modules import LLM, TransformerBlock
+    m = LLM(vocab_size=vocab_size, context_length=context_length, num_layers=num_layers, num_heads=num_heads, d_model=d_model, d_ff=d_ff, theta=rope_theta)
+    _set_weight(m.embedding.weight, weights['token_embeddings.weight'])
+    for i in range(num_layers):
+        layer = m.layers[i] # type: TransformerBlock # type: ignore
+        _set_weight(layer.attn.linear_q.weight, weights[f'layers.{i}.attn.q_proj.weight'])
+        _set_weight(layer.attn.linear_k.weight, weights[f'layers.{i}.attn.k_proj.weight'])
+        _set_weight(layer.attn.linear_v.weight, weights[f'layers.{i}.attn.v_proj.weight'])
+        _set_weight(layer.attn.linear_o.weight, weights[f'layers.{i}.attn.output_proj.weight'])
+        _set_weight(layer.norm1.weight, weights[f'layers.{i}.ln1.weight'])
+        _set_weight(layer.ffn.gated_lu.weight, weights[f'layers.{i}.ffn.w1.weight'])
+        _set_weight(layer.ffn.gated_lu.v, weights[f'layers.{i}.ffn.w3.weight'])
+        _set_weight(layer.ffn.linear.weight, weights[f'layers.{i}.ffn.w2.weight'])
+        _set_weight(layer.norm2.weight, weights[f'layers.{i}.ln2.weight'])
+    _set_weight(m.norm1.weight, weights['ln_final.weight'])
+    _set_weight(m.out_embed.weight, weights['lm_head.weight'])
+    return m.forward(in_indices)
 
 
 def run_rmsnorm(

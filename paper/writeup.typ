@@ -91,3 +91,6 @@ Notes:
 2. set `mask` if non-present
 3. allow `rope` which applied on $Q$ and $K$
 === Problem (transformer_block): Implement the Transformer block
+=== Problem (transformer_lm): Implementing the Transformer LM
+Notes:
+1. NO pass into `softmax` layer at the end, see also #link("https://github.com/stanford-cs336/assignment1-basics/issues/37")[\#37]

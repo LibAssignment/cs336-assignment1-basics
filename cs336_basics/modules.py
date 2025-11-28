@@ -40,7 +40,7 @@ class Embedding(Module):
     )
     torch.nn.init.trunc_normal_(self.weight)
 
-  def forward(self, token_ids: Int[Tensor, " ... "]):
+  def forward(self, token_ids: Int[Tensor, " ... vocab"]) -> Float[Tensor, " ... d_embed"]:
     return self.weight[token_ids]
 
 
@@ -203,6 +203,36 @@ class TransformerBlock(Module):
   def forward(self, x: Tensor):
     attn = x + self.attn.forward(self.norm1.forward(x))
     return attn + self.ffn.forward(self.norm2.forward(attn))
+
+
+class LLM(Module):
+  def __init__(self, vocab_size: int, context_length: int, num_layers: int, d_model: int, d_ff: int, theta: float = 1, num_heads: int = 1, sig: Module | None = None, pos_embed: Module | None = None, device=None, dtype=None):
+    kwargs = DeviceParams(device=device, dtype=dtype)
+    super().__init__()
+    self.embedding = Embedding(num_embeddings=vocab_size, embedding_dim=d_model, **kwargs)
+    self.vocab_size = vocab_size
+    self.context_length = context_length
+    self.d_model = d_model
+    self.d_ff = d_ff
+    d_k = d_model // num_heads
+    if pos_embed is None:
+      pos_embed = RoPE(theta=theta, d_k=d_k, max_seq_len=context_length, **kwargs)
+    self.layers = torch.nn.ModuleList([
+      TransformerBlock(d_model=d_model, d_ff=d_ff, d_k=d_k, d_v=d_k, num_heads=num_heads, sig=sig, pos_embed=pos_embed, **kwargs)
+      for _ in range(num_layers)
+    ])
+    self.norm1 = RMSNorm(d_model=d_model, **kwargs)
+    self.out_embed = Linear(d_model, vocab_size, **kwargs)
+    self.out_softmax = Softmax()
+
+  def forward(self, token_ids: Int[Tensor, "... vocab"]) -> Float[Tensor, "... vocab"]:
+    x = self.embedding.forward(token_ids)
+    for layer in self.layers:
+      x = layer.forward(x)
+    x = self.norm1.forward(x)
+    x = self.out_embed.forward(x)
+    # return self.out_softmax.forward(x)
+    return x
 
 
 def _linear(
