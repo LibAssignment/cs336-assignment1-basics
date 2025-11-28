@@ -81,3 +81,10 @@ _cross_entory(torch.randn(2, 4), torch.tensor([2, 3]))
 _cross_entory(torch.randn(2, 3, 4), torch.randint(0, 3, (2, 3)))
 
 # %%
+from cs336_basics.optimizer import SGD, AdamW
+from cs336_basics.modules import Linear
+m = Linear(5, 3)
+s = AdamW(m.parameters(), lr=0.001, weight_decay=0.9)
+print(s)
+
+# %%
