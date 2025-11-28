@@ -161,12 +161,12 @@ def run_multihead_self_attention(
     from cs336_basics.modules import MultiHeadAttention
     d_k = k_proj_weight.shape[-2]
     d_v = v_proj_weight.shape[-2]
-    m = MultiHeadAttention(d_model, num_heads, d_k, d_v)
+    m = MultiHeadAttention(d_model=d_model, d_k=d_k, d_v=d_v, num_heads=num_heads)
     _set_weight(m.linear_q.weight, q_proj_weight)
     _set_weight(m.linear_k.weight, k_proj_weight)
     _set_weight(m.linear_v.weight, v_proj_weight)
     _set_weight(m.linear_o.weight, o_proj_weight)
-    return m.forward(in_features, in_features)
+    return m.forward(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -206,7 +206,17 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+
+    from cs336_basics.modules import RoPE, MultiHeadAttention
+    d_k = k_proj_weight.shape[-2]
+    d_v = v_proj_weight.shape[-2]
+    rope = RoPE(theta=theta, d_k=d_k // num_heads, max_seq_len=max_seq_len)
+    m = MultiHeadAttention(d_model=d_model, d_k=d_k, d_v=d_v, num_heads=num_heads, pos_embed=rope)
+    _set_weight(m.linear_q.weight, q_proj_weight)
+    _set_weight(m.linear_k.weight, k_proj_weight)
+    _set_weight(m.linear_v.weight, v_proj_weight)
+    _set_weight(m.linear_o.weight, o_proj_weight)
+    return m.forward(in_features)
 
 
 def run_rope(

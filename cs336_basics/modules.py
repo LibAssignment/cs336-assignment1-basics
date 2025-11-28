@@ -118,8 +118,10 @@ class RoPE(Module):
     self.R = _rope_rotate(self.Theta, self.d_n, self.d_k) \
       .to(device=device, dtype=dtype).to_dense()
 
-  def forward(self, x: Float[Tensor, "... seq_len d_k"], token_positions: Int[Tensor, "... seq_len"]):
+  def forward(self, x: Float[Tensor, "... seq_len d_k"], token_positions: Int[Tensor, "... seq_len"] | None = None):
     assert x.shape[-1] == self.d_k
+    if token_positions is None:
+      token_positions = torch.arange(x.shape[-2])
     assert x.shape[-2] == token_positions.shape[-1]
     m = self.R[token_positions]
     return einsum(x, m, "... k, ... k2 k -> ... k2")
@@ -158,7 +160,7 @@ class Attention(Module):
 
 class MultiHeadAttention(Module):
   __constants__ = ["d_embed", "d_k", "d_v", "n_heads", "auto_mask"]
-  def __init__(self, d_model: int, num_heads: int, d_k: int, d_v: int, mask: bool = True, device=None, dtype=None):
+  def __init__(self, d_model: int, d_k: int, d_v: int, num_heads: int = 1, pos_embed: Module | None = None, mask: bool = True, device=None, dtype=None):
     kwargs = {"device": device, "dtype": dtype}
     super().__init__()
     self.d_embed = d_model
@@ -166,6 +168,7 @@ class MultiHeadAttention(Module):
     self.d_v = d_v
     self.n_heads = num_heads
     self.auto_mask = mask
+    self.pos_embed = pos_embed
     self.linear_q = Linear(d_model, d_k, **kwargs)
     self.linear_k = Linear(d_model, d_k, **kwargs)
     self.linear_v = Linear(d_model, d_v, **kwargs)
@@ -174,15 +177,20 @@ class MultiHeadAttention(Module):
   def forward(
       self,
       q_input: Float[Tensor, "... queries d_embed"],
-      v_input: Float[Tensor, "... values d_embed"],
+      v_input: Float[Tensor, "... values d_embed"] | None = None,
       mask: Bool[Tensor, " ... queries keys"] | None = None,
   ) -> Float[Tensor, "... queries d_v"]:
+    if v_input is None:
+      v_input = q_input
     Q = self.linear_q.forward(q_input) # Float[Tensor, " ... queries d_k"]
     K = self.linear_k.forward(v_input) # Float[Tensor, " ... keys d_k"]
     V = self.linear_v.forward(v_input) # Float[Tensor, " ... keys d_v"]
     Q = rearrange(Q, "... queries (h d_k) -> ... h queries d_k", h=self.n_heads)
     K = rearrange(K, "... keys (h d_k) -> ... h keys d_k", h=self.n_heads)
     V = rearrange(V, "... keys (h d_v) -> ... h keys d_v", h=self.n_heads)
+    if self.pos_embed is not None:
+      Q: Tensor = self.pos_embed(Q)
+      K: Tensor = self.pos_embed(K)
     if mask is None and self.auto_mask:
       d_queries = q_input.shape[-2]
       d_keys = q_input.shape[-2]
