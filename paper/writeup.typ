@@ -94,8 +94,8 @@ Notes:
 === Problem (transformer_lm): Implementing the Transformer LM
 Notes:
 1. NO pass into `softmax` layer at the end, see also #link("https://github.com/stanford-cs336/assignment1-basics/issues/37")[\#37]
-=== Problem (transformer_accounting): Transformer LM resource accounting
-a) Suppose we constructed our model using this configuration.
+== Problem (transformer_accounting): Transformer LM resource accounting
+=== a) Suppose we constructed our model using this configuration.
 #let vocab_size = 50257
 #let d_model = 1600
 #let d_ff = 6400
@@ -130,27 +130,27 @@ $
 - Assuming each parameter is represented using single-precision floating point, how much memory is required to just load this model?
   - $#calc_MiB(total_params * 4, 3, 3) "GiB"$ memory.
 
-b) Identify the matrix multiplies required to complete a forward pass of our GPT-2 XL-shaped model. Assume that our input
-sequence has context_length tokens.
+=== b) Identify the matrix multiplies required to complete a forward pass of our GPT-2 XL-shaped model. Assume that our input sequence has context_length tokens.
 #let attn_proj_calc = 2*d_model*d_model*context_length
 #let ffn_linear_calc = 2*d_model*d_ff*context_length
-#let attn_total_calc = 4*attn_proj_calc + 3*ffn_linear_calc
+#let attn_total_calc = 5*attn_proj_calc + 3*ffn_linear_calc
 #let head_embedding_calc = 2*d_model*vocab_size*context_length
 #let total_calc = attn_total_calc * num_layers + head_embedding_calc
 #table(
   columns: (auto, auto, auto, auto),
   table.header("name", "matrix", "multiple", "value (TFLOPs)"),
-  "attention_q_proj", [$W_q in RR^(h d_k times d_"model"), x in RR^("seq"times d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
-  "attention_k_proj", [$W_k in RR^(h d_k times d_"model"), x in RR^("seq"times d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
-  "attention_v_proj", [$W_v in RR^(h d_v times d_"model"), x in RR^("seq"times d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
-  "attention_o_proj", [$W_o in RR^(d_"model" times h d_v), x in RR^("seq"times h d_v)$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
-  "ffn_linear1", [$W_1 in RR^(d_"ff" times d_"model"), x in RR^("seq"times d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(ffn_linear_calc, 4, 3)],
-  "ffn_linear_gate", [$W_3 in RR^(d_"ff" times d_"model"), x in RR^("seq"times d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(ffn_linear_calc, 4, 3)],
-  "ffn_linear2", [$W_3 in RR^(d_"model" times d_"ff"), x in RR^("seq"times d_"ff")$], [`2*d_model*d_ff*seq_len`], [#calc_M(ffn_linear_calc, 4, 3)],
-  "attn_total", [], [$4 times #calc_M(attn_proj_calc,4,3) + 3times#calc_M(ffn_linear_calc, 4, 3)$], [#calc_M(attn_total_calc, 4, 3)],
-  "head_embedding", [$W_e in RR^(d_"model" times"vocab"), x in RR^("seq"times d_"model")$], [`2*d_model*vocab*seq_len`], [#calc_M(head_embedding_calc, 4, 3)],
+  "attn_rope", [$W_q in RR^(d_"model" times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
+  "attn_q_proj", [$W_q in RR^(h d_k times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
+  "attn_k_proj", [$W_k in RR^(h d_k times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
+  "attn_v_proj", [$W_v in RR^(h d_v times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
+  "attn_o_proj", [$W_o in RR^(d_"model" times h d_v), x in RR^(h d_v)$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
+  "ffn_linear1", [$W_1 in RR^(d_"ff" times d_"model"), x in RR^(d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(ffn_linear_calc, 4, 3)],
+  "ffn_linear_gate", [$W_3 in RR^(d_"ff" times d_"model"), x in RR^(d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(ffn_linear_calc, 4, 3)],
+  "ffn_linear2", [$W_3 in RR^(d_"model" times d_"ff"), x in RR^(d_"ff")$], [`2*d_model*d_ff*seq_len`], [#calc_M(ffn_linear_calc, 4, 3)],
+  "attn_total", [], [$5 times #calc_M(attn_proj_calc,4,3) + 3times#calc_M(ffn_linear_calc, 4, 3)$], [#calc_M(attn_total_calc, 4, 3)],
+  "head_embedding", [$W_e in RR^(d_"model" times"vocab"), x in RR^(d_"model")$], [`2*d_model*vocab*seq_len`], [#calc_M(head_embedding_calc, 4, 3)],
   "total", [], [$#num_layers times #calc_M(attn_total_calc,4,3) + #calc_M(head_embedding_calc, 4, 3)$], [#calc_M(total_calc, 4, 3)]
 )
 
-c) Based on your analysis above, which parts of the model require the most FLOPs?
-attention and feed-forward layers, since they repeat for 48 layers.
+=== c) Based on your analysis above, which parts of the model require the most FLOPs?
+Attention and feed-forward layers, since they repeat for 48 layers.
