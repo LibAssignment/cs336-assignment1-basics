@@ -235,6 +235,22 @@ class LLM(Module):
     return x
 
 
+class CrossEntropy(Module):
+  def __init__(self, dim=-1, reduce="mean") -> None:
+    self.dim = -1
+    self.reduce = "mean"
+
+  def forward(self, x: Float[Tensor, "... pred"], k: Int[Tensor, "..."]):
+    y = _cross_entory(x, k, dim=self.dim)
+    if self.reduce is None:
+      return y
+    elif self.reduce == "mean":
+      return y.mean(dim=self.dim)
+    elif self.reduce == "sum":
+      return y.sum(dim=self.dim)
+    assert False
+
+
 def _linear(
   d_in: int,
   d_out: int,
@@ -285,3 +301,9 @@ def _scaled_dot_product_attention(
     atten = atten.masked_fill(~mask, -torch.inf)
   atten = _softmax(atten / d_k.sqrt(), dim=-1)
   return einsum(atten, V, "... queries keys, ... keys d_v -> ... queries d_v")
+
+def _cross_entory(pred: Float[Tensor, "... pred"], target: Int[Tensor, "..."], dim=-1) -> Float[Tensor, "..."]:
+  # -_softmax(pred)[target].log()
+  x = pred - pred.max(dim=dim, keepdim=True).values.detach()
+  x_sum = x.exp().sum(dim=dim).log()
+  return x_sum - x.gather(dim=dim, index=target.unsqueeze(dim)).squeeze(dim)

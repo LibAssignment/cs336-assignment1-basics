@@ -64,3 +64,20 @@ x_masked
 ~torch.triu(torch.ones(3, 3, dtype=torch.bool), diagonal=1)
 
 # %%
+import torch
+x = torch.randn(2, 5, 4)
+t = torch.tensor([1,2,3,2,1,0,0,0,0,1]).reshape(2, 5)
+# select values from the last dimension using t: result shape (2, 5)
+x_selected = torch.gather(x, 2, t.unsqueeze(-1)).squeeze(-1)
+# %%
+# gather along last dim using t (indices), result shape (2, 5)
+x_selected = torch.gather(x, -1, t.unsqueeze(-1)).squeeze(-1)
+x_selected
+
+# %%
+from cs336_basics.modules import _cross_entory
+_cross_entory(torch.randn(4), torch.tensor(2))
+_cross_entory(torch.randn(2, 4), torch.tensor([2, 3]))
+_cross_entory(torch.randn(2, 3, 4), torch.randint(0, 3, (2, 3)))
+
+# %%

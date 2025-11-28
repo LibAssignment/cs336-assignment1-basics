@@ -154,3 +154,14 @@ $
 
 === c) Based on your analysis above, which parts of the model require the most FLOPs?
 Attention and feed-forward layers, since they repeat for 48 layers.
+
+= Training a Transformer LM
+=== Problem (cross_entropy): Implement Cross entropy
+Notes:
+1. `x.gather(dim=dim, index=target.unsqueeze(dim)).squeeze(dim)`
+2. The tests requires `mean` if batch is present.
+=== Problem (adamw): Implement AdamW
+
+
+=== Problem (learning_rate_tuning): Tuning the learning rate
+TODO
