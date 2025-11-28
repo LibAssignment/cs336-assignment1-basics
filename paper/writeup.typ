@@ -96,64 +96,195 @@ Notes:
 1. NO pass into `softmax` layer at the end, see also #link("https://github.com/stanford-cs336/assignment1-basics/issues/37")[\#37]
 == Problem (transformer_accounting): Transformer LM resource accounting
 === a) Suppose we constructed our model using this configuration.
-#let vocab_size = 50257
-#let d_model = 1600
-#let d_ff = 6400
-#let num_heads = 25
-#let num_layers = 48
-#let context_length = 1024
+#let config_xl_base = (
+  vocab_size: 50257,
+  d_model: 1600,
+  d_ff: 6400,
+  num_heads: 25,
+  num_layers: 48,
+  context_length: 1024
+)
+#let calc_params(config) = {
+  let params = (
+    embedding: config.vocab_size * config.d_model,
+    layer: (
+      attn: 4 * config.d_model * config.d_model,
+      ffn: 3 * config.d_model * config.d_ff,
+      rmsnorm: 2 * config.d_model,
+    ),
+    head_embedding: (
+      norm: config.d_model,
+      proj: config.d_model * config.vocab_size,
+    ),
+  )
+  params.layer.total = params.layer.attn + params.layer.ffn + params.layer.rmsnorm
+  params.head_embedding.total = params.head_embedding.norm + params.head_embedding.proj
+  params.total = params.embedding + params.layer.total * config.num_layers + params.head_embedding.total
+  params.total_bytes = params.total * 4  // assuming float32
+  (
+    ..config,
+    params: params,
+  )
+}
+#let config_xl = calc_params(config_xl_base)
 
-$"vocab_size"&: #vocab_size \
-"context_length"&: #context_length \
-"num_layers"&: #num_layers \
-"d_model"&: #d_model \
-"num_heads"&: #num_heads \
-"d_ff"&: #d_ff \
+$"vocab_size"&: #config_xl.vocab_size \
+"context_length"&: #config_xl.context_length \
+"num_layers"&: #config_xl.num_layers \
+"d_model"&: #config_xl.d_model \
+"num_heads"&: #config_xl.num_heads \
+"d_ff"&: #config_xl.d_ff \
 $
-#let calc_M(b, k, i) = calc.round(b / calc.pow(1000, k) * calc.pow(10, i)) / calc.pow(10, i)
-#let calc_MiB(b, k, i) = calc.round(b / calc.pow(1024, k) * calc.pow(10, i)) / calc.pow(10, i)
+#let calc_M(b, k: 2, i: 3) = calc.round(b / calc.pow(1000, k) * calc.pow(10, i)) / calc.pow(10, i)
+#let calc_MiB(b, k: 2, i: 3) = calc.round(b / calc.pow(1024, k) * calc.pow(10, i)) / calc.pow(10, i)
 - How many trainable parameters would our model have?
-  - embedding: #let embedding_param = vocab_size * d_model;  `vocab_size * d_model =` $#vocab_size times #d_model = #embedding_param approx 80Mu$
+  - embedding:  `vocab_size * d_model =` $#config_xl.vocab_size times #config_xl.d_model = #config_xl.params.embedding approx 80Mu$
   - transformer block:
-    #let layer_attn_params = 4 * d_model * d_model
-    #let layer_ffn_params = 3 * d_model * d_ff
-    #let layer_rmsnorm_params = 2 * d_model
-    #let layer_params = layer_attn_params + layer_ffn_params + layer_rmsnorm_params
-    $~ #(calc_M(layer_params, 2, 0))Mu$
-    - attention: `4 * d_model * d_model =` $4 times #d_model times #d_model approx #calc_M(layer_attn_params, 2, 0)Mu$
-    - ffn: `3 * d_model * d_ff =` $3 times #d_model times #d_ff approx #calc_M(layer_ffn_params, 2, 0)Mu$
-    - rmsnorm: `2 * d_model =` $2 times #d_model approx #calc_M(layer_rmsnorm_params, 2, 3)Mu$
-  - head: #let head_params = d_model + d_model * vocab_size; $~#calc_M(embedding_param, 2, 0)Mu$
-    - norm: `d_model =` $#d_model approx #calc_M(d_model, 2, 3)Mu$
-    - embedding proj: `d_model * vocab_size =` $#d_model times #vocab_size approx #calc_M(embedding_param, 2, 0)Mu$
-  - total: `embedding + num_layers * layer_params + head` #let total_params = embedding_param + num_layers * layer_params + head_params; $approx #calc_M(total_params, 3, 3)"B"$
+    $~ #(calc_M(config_xl.params.layer.total))Mu$
+    - attention: `4 * d_model * d_model =` $4 times #config_xl.d_model times #config_xl.d_model approx #calc_M(config_xl.params.layer.attn)Mu$
+    - ffn: `3 * d_model * d_ff =` $3 times #config_xl.d_model times #config_xl.d_ff approx #calc_M(config_xl.params.layer.ffn)Mu$
+    - rmsnorm: `2 * d_model =` $2 times #config_xl.d_model approx #calc_M(config_xl.params.layer.rmsnorm)Mu$
+  - head: $~#calc_M(config_xl.params.embedding)Mu$
+    - norm: `d_model =` $#config_xl.d_model approx #calc_M(config_xl.d_model)Mu$
+    - embedding proj: `d_model * vocab_size =` $#config_xl.d_model times #config_xl.vocab_size approx #calc_M(config_xl.params.embedding, i: 0)Mu$
+  - total: `embedding + num_layers * layer_params + head` $approx #calc_M(config_xl.params.total, k: 3)"B"$
 - Assuming each parameter is represented using single-precision floating point, how much memory is required to just load this model?
-  - $#calc_MiB(total_params * 4, 3, 3) "GiB"$ memory.
+  - $#calc_MiB(config_xl.params.total_bytes, k: 3) "GiB"$ memory.
 
 === b) Identify the matrix multiplies required to complete a forward pass of our GPT-2 XL-shaped model. Assume that our input sequence has context_length tokens.
-#let attn_proj_calc = 2*d_model*d_model*context_length
-#let ffn_linear_calc = 2*d_model*d_ff*context_length
-#let attn_total_calc = 5*attn_proj_calc + 3*ffn_linear_calc
-#let head_embedding_calc = 2*d_model*vocab_size*context_length
-#let total_calc = attn_total_calc * num_layers + head_embedding_calc
+
+#let calc_tflops(config) = {
+  let d_model = config.d_model
+  let context_length = config.context_length
+  let vocab_size = config.vocab_size
+  let d_ff = config.d_ff
+  let tflops = (
+    attn: (
+      proj: 2*d_model*d_model*context_length,
+      ffn_linear: 2*d_model*d_ff*context_length,
+    ),
+    head_embedding: 2*d_model*vocab_size*context_length,
+  )
+  tflops.attn.total = 5*tflops.attn.proj + 3*tflops.attn.ffn_linear
+  tflops.total = tflops.attn.total * config.num_layers + tflops.head_embedding
+  tflops.total_tflops = calc.round(tflops.total / calc.pow(10, 9)) / 1000 // convert to TFLOPs
+  (
+    ..config,
+    tflops: tflops,
+  )
+}
+#let config_xl = calc_tflops(config_xl)
+
+// #let vocab_size = 50257
+// #let d_model = 1600
+// #let d_ff = 6400
+// #let num_heads = 25
+// #let num_layers = 48
+// #let context_length = 1024
+
 #table(
   columns: (auto, auto, auto, auto),
   table.header("name", "matrix", "multiple", "value (TFLOPs)"),
-  "attn_rope", [$W_q in RR^(d_"model" times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
-  "attn_q_proj", [$W_q in RR^(h d_k times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
-  "attn_k_proj", [$W_k in RR^(h d_k times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
-  "attn_v_proj", [$W_v in RR^(h d_v times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
-  "attn_o_proj", [$W_o in RR^(d_"model" times h d_v), x in RR^(h d_v)$], [`2*d_model^2*seq_len`], [#calc_M(attn_proj_calc, 4, 3)],
-  "ffn_linear1", [$W_1 in RR^(d_"ff" times d_"model"), x in RR^(d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(ffn_linear_calc, 4, 3)],
-  "ffn_linear_gate", [$W_3 in RR^(d_"ff" times d_"model"), x in RR^(d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(ffn_linear_calc, 4, 3)],
-  "ffn_linear2", [$W_3 in RR^(d_"model" times d_"ff"), x in RR^(d_"ff")$], [`2*d_model*d_ff*seq_len`], [#calc_M(ffn_linear_calc, 4, 3)],
-  "attn_total", [], [$5 times #calc_M(attn_proj_calc,4,3) + 3times#calc_M(ffn_linear_calc, 4, 3)$], [#calc_M(attn_total_calc, 4, 3)],
-  "head_embedding", [$W_e in RR^(d_"model" times"vocab"), x in RR^(d_"model")$], [`2*d_model*vocab*seq_len`], [#calc_M(head_embedding_calc, 4, 3)],
-  "total", [], [$#num_layers times #calc_M(attn_total_calc,4,3) + #calc_M(head_embedding_calc, 4, 3)$], [#calc_M(total_calc, 4, 3)]
+  "attn_rope", [$W_q in RR^(d_"model" times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "attn_q_proj", [$W_q in RR^(h d_k times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "attn_k_proj", [$W_k in RR^(h d_k times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "attn_v_proj", [$W_v in RR^(h d_v times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "attn_o_proj", [$W_o in RR^(d_"model" times h d_v), x in RR^(h d_v)$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "ffn_linear1", [$W_1 in RR^(d_"ff" times d_"model"), x in RR^(d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
+  "ffn_linear_gate", [$W_3 in RR^(d_"ff" times d_"model"), x in RR^(d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
+  "ffn_linear2", [$W_3 in RR^(d_"model" times d_"ff"), x in RR^(d_"ff")$], [`2*d_model*d_ff*seq_len`], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
+  "attn_total", [], [$5 times #calc_M(config_xl.tflops.attn.proj, k:4, i:3) + 3times#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)$], [#calc_M(config_xl.tflops.attn.total, k: 4)],
+  "head_embedding", [$W_e in RR^(d_"model" times"vocab"), x in RR^(d_"model")$], [`2*d_model*vocab*seq_len`], [#calc_M(config_xl.tflops.head_embedding, k: 4)],
+  "total", [], [$#config_xl.num_layers times #calc_M(config_xl.tflops.attn.total, k: 4) + #calc_M(config_xl.tflops.head_embedding, k: 4)$], [#calc_M(config_xl.tflops.total, k: 4)]
 )
 
 === c) Based on your analysis above, which parts of the model require the most FLOPs?
 Attention and feed-forward layers, since they repeat for 48 layers.
+
+=== d) Repeat your analysis with GPT-2 small (12 layers, 768 d_model, 12 heads), GPT-2 medium (24 layers, 1024 d_model, 16 heads), and GPT-2 large (36 layers, 1280 d_model, 20 heads).
+#let calc_config(config) = calc_tflops(calc_params(config))
+#let config_small = (
+  ..config_xl_base,
+  d_model: 768,
+  d_ff: 3072,
+  num_heads: 12,
+  num_layers: 12,
+)
+#let config_small = calc_config(config_small)
+
+#let config_medium = (
+  ..config_xl_base,
+  d_model: 1024,
+  d_ff: 4096,
+  num_heads: 16,
+  num_layers: 24,
+)
+#let config_medium = calc_config(config_medium)
+
+#let config_large = (
+  ..config_xl_base,
+  d_model: 1280,
+  d_ff: 5120,
+  num_heads: 20,
+  num_layers: 36,
+)
+#let config_large = calc_config(config_large)
+
+Memory:
+#table(
+  columns: (auto, auto, auto, auto, auto),
+  table.header("name", "GPT-2 small", "GPT-2 medium", "GPT-2 large", "GPT-2 XL"),
+  "embedding", [#calc_MiB(config_small.params.embedding)], [#calc_MiB(config_medium.params.embedding)], [#calc_MiB(config_large.params.embedding)], [#calc_MiB(config_xl.params.embedding)],
+  "transformer block", [#calc_MiB(config_small.params.layer.total)], [#calc_MiB(config_medium.params.layer.total)], [#calc_MiB(config_large.params.layer.total)], [#calc_MiB(config_xl.params.layer.total)],
+  "  (attn)", [#calc_MiB(config_small.params.layer.attn)], [#calc_MiB(config_medium.params.layer.attn)], [#calc_MiB(config_large.params.layer.attn)], [#calc_MiB(config_xl.params.layer.attn)],
+  "  (ffn)", [#calc_MiB(config_small.params.layer.ffn)], [#calc_MiB(config_medium.params.layer.ffn)], [#calc_MiB(config_large.params.layer.ffn)], [#calc_MiB(config_xl.params.layer.ffn)],
+  "  (rmsnorm)", [#calc_MiB(config_small.params.layer.rmsnorm)], [#calc_MiB(config_medium.params.layer.rmsnorm)], [#calc_MiB(config_large.params.layer.rmsnorm)], [#calc_MiB(config_xl.params.layer.rmsnorm)],
+  "head embedding", [#calc_MiB(config_small.params.head_embedding.total)], [#calc_MiB(config_medium.params.head_embedding.total)], [#calc_MiB(config_large.params.head_embedding.total)], [#calc_MiB(config_xl.params.head_embedding.total)],
+  "  (norm)", [#calc_MiB(config_small.params.head_embedding.norm)], [#calc_MiB(config_medium.params.head_embedding.norm)], [#calc_MiB(config_large.params.head_embedding.norm)], [#calc_MiB(config_xl.params.head_embedding.norm)],
+  "  (proj)", [#calc_MiB(config_small.params.head_embedding.proj)], [#calc_MiB(config_medium.params.head_embedding.proj)], [#calc_MiB(config_large.params.head_embedding.proj)], [#calc_MiB(config_xl.params.head_embedding.proj)],
+  "total (B)", [#calc_MiB(config_small.params.total, k: 3)], [#calc_MiB(config_medium.params.total, k: 3)], [#calc_MiB(config_large.params.total, k: 3)], [#calc_MiB(config_xl.params.total, k: 3)],
+  "total (GiB)", [#calc_MiB(config_small.params.total_bytes, k: 3)], [#calc_MiB(config_medium.params.total_bytes, k: 3)], [#calc_MiB(config_large.params.total_bytes, k: 3)], [#calc_MiB(config_xl.params.total_bytes, k: 3)],
+
+)
+
+TFLOPs:
+#table(
+  columns: (auto, auto, auto, auto, auto),
+  table.header("name", "GPT-2 small", "GPT-2 medium", "GPT-2 large", "GPT-2 XL"),
+  "transformer block", [#calc_M(config_small.tflops.attn.total, k: 4)], [#calc_M(config_medium.tflops.attn.total, k: 4)], [#calc_M(config_large.tflops.attn.total, k: 4)], [#calc_M(config_xl.tflops.attn.total, k: 4)],
+  "  (rope)", [#calc_M(config_small.tflops.attn.proj, k: 4)], [#calc_M(config_medium.tflops.attn.proj, k: 4)], [#calc_M(config_large.tflops.attn.proj, k: 4)], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "  (proj x 4)", [#calc_M(config_small.tflops.attn.proj, k: 4)], [#calc_M(config_medium.tflops.attn.proj, k: 4)], [#calc_M(config_large.tflops.attn.proj, k: 4)], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "  (ffn x 3)", [#calc_M(config_small.tflops.attn.ffn_linear, k: 4)], [#calc_M(config_medium.tflops.attn.ffn_linear, k: 4)], [#calc_M(config_large.tflops.attn.ffn_linear, k: 4)], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
+  "head embedding", [#calc_M(config_small.tflops.head_embedding, k: 4)], [#calc_M(config_medium.tflops.head_embedding, k: 4)], [#calc_M(config_large.tflops.head_embedding, k: 4)], [#calc_M(config_xl.tflops.head_embedding, k: 4)],
+  "total (TFLOPs)", [#calc_M(config_small.tflops.total, k: 4)], [#calc_M(config_medium.tflops.total, k: 4)], [#calc_M(config_large.tflops.total, k: 4)], [#calc_M(config_xl.tflops.total, k: 4)],
+)
+FFN in Transformer block contributes the most FLOPs, since it has 3 matrix multiplies per layer, and there're lots of layers.
+
+=== e) Take GPT-2 XL and increase the context length to 16,384. How does the total FLOPs for one forward pass change? How do the relative contribution of FLOPs of the model components change?
+#let config_xl_4096 = calc_config((
+  ..config_xl_base,
+  context_length: 4096,
+))
+#let config_xl_16384 = calc_config((
+  ..config_xl_base,
+  context_length: 16384,
+))
+#let config_xl_100k = calc_config((
+  ..config_xl_base,
+  context_length: 102400,
+))
+
+#table(
+  columns: (auto, auto, auto, auto, auto),
+  table.header("name", "1024", "4096", "16384", "100k"),
+  "transformer block", [#calc_M(config_xl.tflops.attn.total, k: 4)], [#calc_M(config_xl_4096.tflops.attn.total, k: 4)], [#calc_M(config_xl_16384.tflops.attn.total, k: 4)], [#calc_M(config_xl_100k.tflops.attn.total, k: 4)],
+  "  (rope)", [#calc_M(config_xl.tflops.attn.proj, k: 4)], [#calc_M(config_xl_4096.tflops.attn.proj, k: 4)], [#calc_M(config_xl_16384.tflops.attn.proj, k: 4)], [#calc_M(config_xl_100k.tflops.attn.proj, k: 4)],
+  "  (proj x 4)", [#calc_M(config_xl.tflops.attn.proj, k: 4)], [#calc_M(config_xl_4096.tflops.attn.proj, k: 4)], [#calc_M(config_xl_16384.tflops.attn.proj, k: 4)], [#calc_M(config_xl_100k.tflops.attn.proj, k: 4)],
+  "  (ffn x 3)", [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)], [#calc_M(config_xl_4096.tflops.attn.ffn_linear, k: 4)], [#calc_M(config_xl_16384.tflops.attn.ffn_linear, k: 4)], [#calc_M(config_xl_100k.tflops.attn.ffn_linear, k: 4)],
+  "head embedding", [#calc_M(config_xl.tflops.head_embedding, k: 4)], [#calc_M(config_xl_4096.tflops.head_embedding, k: 4)], [#calc_M(config_xl_16384.tflops.head_embedding, k: 4)], [#calc_M(config_xl_100k.tflops.head_embedding, k: 4)],
+  "total (TFLOPs)", [#calc_M(config_xl.tflops.total, k: 4)], [#calc_M(config_xl_4096.tflops.total, k: 4)], [#calc_M(config_xl_16384.tflops.total, k: 4)], [#calc_M(config_xl_100k.tflops.total, k: 4)],
+)
+It is almost linear for FLOPs of every component, since the context length is only used in the matrix multiplication of the attention and feed-forward layers. The total FLOPs for one forward pass increases linearly with the context length.
 
 = Training a Transformer LM
 === Problem (cross_entropy): Implement Cross entropy
@@ -164,6 +295,9 @@ Notes:
 Notes:
 1. `step_count` should start from 1 to avoid zero division, and stored in state
 2. `alpha_t` would initially `~300` times of `alpha` and decay to `alpha` gradually (in 10000 steps).
+=== Problem (learning_rate_schedule): Implement cosine learning rate schedule with warmup
 
 === Problem (learning_rate_tuning): Tuning the learning rate
 TODO
+
+=== Problem (adamwAccounting): Resource accounting for training with AdamW
