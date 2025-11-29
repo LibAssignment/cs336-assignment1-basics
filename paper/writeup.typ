@@ -304,3 +304,6 @@ Notes:
 Note: we are dealing with `param.grad` here.
 
 === Problem (adamwAccounting): Resource accounting for training with AdamW
+
+= Training loop
+=== Problem (data_loading): Implement data loading
