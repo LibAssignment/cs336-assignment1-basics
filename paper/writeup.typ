@@ -296,6 +296,9 @@ Notes:
 1. `step_count` should start from 1 to avoid zero division, and stored in state
 2. `alpha_t` would initially `~300` times of `alpha` and decay to `alpha` gradually (in 10000 steps).
 === Problem (learning_rate_schedule): Implement cosine learning rate schedule with warmup
+- for `lr=1e1` the loss decreases slowly but steadily.
+- for `lr=1e2` the loss decreases to a lower value faster.
+- for `lr=1e3` the loss increases and diverges.
 
 === Problem (learning_rate_tuning): Tuning the learning rate
 TODO

@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 import math
 from typing import NotRequired, TypedDict, cast
 from torch import Tensor
@@ -14,21 +14,30 @@ class _GroupParams(TypedDict):
 class _SGDParams(TypedDict):
   lr: float
 
-class _SDGGroupParams(_SGDParams, _GroupParams):
+class _SGDGroupParams(_SGDParams, _GroupParams):
   pass
+
+class _SGDState(TypedDict):
+  t: NotRequired[int]
 
 class SGD(Optimizer):
   def __init__(self, params: ParamsT, lr: float = 0.01):
     super().__init__(params, dict(lr=lr))
 
-  def step(self): # type: ignore
-    for group in cast(list[_SDGGroupParams], self.param_groups):
+  def step(self, closure: Callable[[], float] | None = None): # type: ignore
+    loss = None if closure is None else closure()
+    for group in cast(list[_SGDGroupParams], self.param_groups):
       lr = group["lr"]
       for p in group["params"]:
         if p.grad is None:
           continue
+        state = cast(_SGDState, self.state[p])
+        t = state.get('t', 0) + 1
         grad = p.grad.data
-        p.data -= lr * grad
+        p.data -= lr / math.sqrt(t) * grad
+        state['t'] = t
+
+    return loss
 
 
 class _AdamWParams(TypedDict):
@@ -57,7 +66,8 @@ class AdamW(Optimizer):
     )
     super().__init__(params, cast(dict, defaults))
 
-  def step(self): # type: ignore
+  def step(self, closure: Callable[[], float] | None = None): # type: ignore
+    loss = None if closure is None else closure()
     for group in cast(list[_AdamWGroupParams], self.param_groups):
       beta1 = group["beta1"]
       beta2 = group["beta2"]
@@ -81,3 +91,4 @@ class AdamW(Optimizer):
 
         param.data -= alpha_t * m / (v.sqrt() + epsilon)
         param.data *= 1 - alpha * decay
+    return loss
