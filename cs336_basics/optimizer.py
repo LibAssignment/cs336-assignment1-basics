@@ -6,6 +6,7 @@ import torch
 from torch.nn import Module, Parameter
 from torch.optim import Optimizer
 from torch.optim.optimizer import ParamsT
+from torch.optim.lr_scheduler import LRScheduler
 
 
 class _GroupParams(TypedDict):
@@ -41,7 +42,7 @@ class SGD(Optimizer):
 
 
 class _AdamWParams(TypedDict):
-  alpha: float
+  lr: float
   beta1: float
   beta2: float
   epsilon: float
@@ -58,7 +59,7 @@ class _AdamState(TypedDict):
 class AdamW(Optimizer):
   def __init__(self, params: ParamsT, lr: float = 0.001, weight_decay: float = 0.1, betas: tuple[float, float] = (0.9, 0.999), eps: float = 1e-8):
     defaults = _AdamWParams(
-      alpha = lr,
+      lr = lr,
       beta1 = betas[0],
       beta2 = betas[1],
       epsilon = eps,
@@ -71,7 +72,7 @@ class AdamW(Optimizer):
     for group in cast(list[_AdamWGroupParams], self.param_groups):
       beta1 = group["beta1"]
       beta2 = group["beta2"]
-      alpha = group['alpha']
+      alpha = group['lr']
       epsilon = group['epsilon']
       decay = group['lamda']
       for param in group["params"]:
@@ -92,3 +93,33 @@ class AdamW(Optimizer):
         param.data -= alpha_t * m / (v.sqrt() + epsilon)
         param.data *= 1 - alpha * decay
     return loss
+
+class CosineLR(LRScheduler):
+  def __init__(self,
+      optimizer: Optimizer,
+      last_epoch: int = -1,
+      *,
+      alpha_range: tuple[float, float],
+      warmup_steps: int = 0,
+      cosine_steps: int = 1000
+    ):
+    super().__init__(optimizer, last_epoch)
+    self.a_min = alpha_range[0]
+    self.a_max = alpha_range[1]
+    self.warmup_steps = warmup_steps
+    self.cosine_steps = cosine_steps
+
+  def _lr(self):
+    return _lr_cosine(self._step_count, self.a_min, self.a_max, self.warmup_steps, self.cosine_steps)
+
+  def get_lr(self):
+    lr = self._lr() / self.a_max
+    return [lr * group["initial_lr"] for group in self.optimizer.param_groups]
+
+def _lr_cosine(t: int, a_min: float, a_max: float, t_warmup: int, t_cosine: int):
+  if t < t_warmup:
+    return t / t_warmup * a_max
+  if t < t_cosine:
+    k = (t - t_warmup) / (t_cosine - t_warmup)
+    return a_min + (1 + math.cos(k * math.pi)) * (a_max -a_min) / 2
+  return a_min

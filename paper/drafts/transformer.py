@@ -93,3 +93,18 @@ steps = torch.arange(10000) + 1
 (1 - beta1 ** steps).sqrt() / (1 - beta2 ** steps)
 
 # %%
+import math
+import matplotlib.pyplot as plt
+def _lr_cosine(t: int, alpha_range: tuple[float, float], t_warmup: int, t_cosine: int):
+  a_min, a_max = alpha_range
+  if t < t_warmup:
+    return t / t_warmup * a_max
+  if t < t_cosine:
+    k = (t - t_warmup) / (t_cosine - t_warmup)
+    return a_min + (1 + math.cos(k * math.pi)) * (a_max -a_min) / 2
+  return a_min
+t = torch.arange(1000)
+lr = [_lr_cosine(int(t), alpha_range=(0.1, 1), t_warmup=50, t_cosine=1000) for t in t]
+plt.plot(lr)
+
+# %%
