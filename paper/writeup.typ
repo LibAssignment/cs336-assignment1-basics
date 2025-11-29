@@ -307,3 +307,4 @@ Note: we are dealing with `param.grad` here.
 
 = Training loop
 === Problem (data_loading): Implement data loading
+why `torch.save` with `torch.load` would not work well with `dtype == torch.int`?

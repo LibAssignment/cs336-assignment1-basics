@@ -1,9 +1,12 @@
 from collections.abc import Iterable
+import os
+from typing import IO, Any, BinaryIO, TypeAlias, TypedDict, cast
 from torch import Tensor
 import torch
 from torch.utils.data import IterableDataset, Dataset
 import numpy as np
 from jaxtyping import Bool, Float, Int
+from torch.serialization import FILE_LIKE
 
 class TokenDataLoader(IterableDataset):
   def __init__(self, array: Int[np.ndarray, "idx"], special_token: int, batch_size: int, context_length: int, device=None):
@@ -82,3 +85,27 @@ def _batch_iter(inputs: Iterable[Int[np.ndarray, "idx"]], batch_size: int, max_l
 
 def _split_xy(input: np.ndarray, device=None):
   return Tensor(input[:, :-1], device=device), Tensor(input[:, 1:], device=device)
+
+
+class CheckPointState(TypedDict):
+  model: dict[str, Any]
+  optim: dict[str, Any]
+  iteration: int
+
+def _save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer, iteration: int, out: FILE_LIKE):
+  state = {
+    "model": model.state_dict(),
+    "optim": optimizer.state_dict(),
+    "iteration": iteration,
+  }
+  torch.save(state, out)
+
+def _load_checkpoint(src: FILE_LIKE, model: torch.nn.Module, optimizer: torch.optim.Optimizer):
+  state = cast(CheckPointState, torch.load(src))
+  if 'model' not in state:
+    raise ValueError("model not present in src")
+  if 'optim' not in state:
+    raise ValueError("optimizer not present in src")
+  model.load_state_dict(state['model'])
+  optimizer.load_state_dict(state['optim'])
+  return state
