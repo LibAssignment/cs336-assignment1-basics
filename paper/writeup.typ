@@ -291,16 +291,16 @@ It is almost linear for FLOPs of every component, since the context length is on
 Notes:
 1. `x.gather(dim=dim, index=target.unsqueeze(dim)).squeeze(dim)`
 2. The tests requires `mean` if batch is present.
+=== Problem (learning_rate_tuning): Tuning the learning rate
+- for `lr=1e1` the loss decreases slowly but steadily.
+- for `lr=1e2` the loss decreases to a lower value faster.
+- for `lr=1e3` the loss increases and diverges.
 === Problem (adamw): Implement AdamW
 Notes:
 1. `step_count` should start from 1 to avoid zero division, and stored in state
 2. `alpha_t` would initially `~300` times of `alpha` and decay to `alpha` gradually (in 10000 steps).
 === Problem (learning_rate_schedule): Implement cosine learning rate schedule with warmup
-- for `lr=1e1` the loss decreases slowly but steadily.
-- for `lr=1e2` the loss decreases to a lower value faster.
-- for `lr=1e3` the loss increases and diverges.
-
-=== Problem (learning_rate_tuning): Tuning the learning rate
-TODO
+=== Problem (gradient_clipping): Implement gradient clipping
+Note: we are dealing with `param.grad` here.
 
 === Problem (adamwAccounting): Resource accounting for training with AdamW

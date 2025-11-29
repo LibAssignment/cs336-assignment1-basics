@@ -108,3 +108,9 @@ lr = [_lr_cosine(int(t), alpha_range=(0.1, 1), t_warmup=50, t_cosine=1000) for t
 plt.plot(lr)
 
 # %%
+import torch
+g = torch.stack([torch.tensor(0), torch.tensor(1)]).sum().sqrt()
+if g < 1:
+  print("g < 1")
+
+# %%

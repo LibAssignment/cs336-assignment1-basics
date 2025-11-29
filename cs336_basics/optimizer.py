@@ -123,3 +123,15 @@ def _lr_cosine(t: int, a_min: float, a_max: float, t_warmup: int, t_cosine: int)
     k = (t - t_warmup) / (t_cosine - t_warmup)
     return a_min + (1 + math.cos(k * math.pi)) * (a_max -a_min) / 2
   return a_min
+
+def _gradient_clipping(params: Iterable[Parameter], max_l2_norm: float, eps=1e-6):
+  grads = [p.grad for p in params if p.grad is not None]
+  g = torch.stack([(p * p).sum() for p in grads])
+  g = g.sum().sqrt()
+  if g < max_l2_norm:
+    return
+  g = max_l2_norm / (g + eps)
+  for p in params:
+    if p.grad is None:
+      continue
+    p.grad.data *= g
