@@ -84,7 +84,7 @@ def _batch_iter(inputs: Iterable[Int[np.ndarray, "idx"]], batch_size: int, max_l
   yield batch_arr
 
 def _split_xy(input: np.ndarray, device=None):
-  return Tensor(input[:, :-1], device=device), Tensor(input[:, 1:], device=device)
+  return torch.tensor(input[:, :-1]).to(device=device), torch.tensor(input[:, 1:]).to(device=device)
 
 
 class CheckPointState(TypedDict):

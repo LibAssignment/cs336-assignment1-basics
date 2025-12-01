@@ -163,6 +163,10 @@ class Tokenizer:
   def merges_display(self):
     return [(self.vocabs[m.tp[0]], self.vocabs[m.tp[1]]) for m in self.merges]
 
+  @property
+  def vocab_size(self):
+    return len(self.vocabs)
+
   def encode_byte(self, b: int) -> Idx:
     if rev := getattr(self, "_vocab_byte_rev", None):
       return rev[b]
@@ -296,11 +300,22 @@ def train_bpe(
     input_path: str | os.PathLike,
     vocab_size: int,
     special_tokens: list[str],
-) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-  tokenizer = Tokenizer.training_from_file(input_path, special_tokens)
+    chunks: int = 1024,
+) -> Tokenizer:
+  tokenizer = Tokenizer.training_from_file(input_path, special_tokens, desired_num_chunks=chunks)
   while len(tokenizer.vocabs) < vocab_size:
     current = tokenizer.step()
     if current is None:
       break
+
+  return tokenizer
+
+def _train_bpe(
+    input_path: str | os.PathLike,
+    vocab_size: int,
+    special_tokens: list[str],
+    chunks: int = 1024,
+) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+  tokenizer = train_bpe(input_path, vocab_size, special_tokens, chunks=chunks)
 
   return dict(tokenizer.vocabs), tokenizer.merges_display

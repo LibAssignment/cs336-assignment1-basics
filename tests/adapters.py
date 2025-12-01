@@ -690,8 +690,8 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    from cs336_basics.tokenizer import train_bpe
-    return train_bpe(input_path, vocab_size, special_tokens)
+    from cs336_basics.tokenizer import _train_bpe
+    return _train_bpe(input_path, vocab_size, special_tokens)
 
 
 def _set_weight(param: torch.nn.Parameter, data: torch.Tensor):

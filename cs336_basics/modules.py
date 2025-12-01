@@ -120,8 +120,8 @@ class RoPE(Module):
     self.Theta = theta
     self.d_k = d_k
     self.d_n = max_seq_len
-    self.R = _rope_rotate(self.Theta, self.d_n, self.d_k) \
-      .to(device=device, dtype=dtype).to_dense()
+    R = _rope_rotate(self.Theta, self.d_n, self.d_k)
+    self.R = R.to_dense().to(device=device, dtype=dtype)
 
   def forward(self, x: Float[Tensor, "... seq_len d_k"], token_positions: Int[Tensor, "... seq_len"] | None = None):
     assert x.shape[-1] == self.d_k
@@ -133,7 +133,9 @@ class RoPE(Module):
 
 
 class Softmax(Module):
+  __constants__ = ["dim"]
   def __init__(self, dim = -1) -> None:
+    super().__init__()
     self.dim = dim
   def forward(self, x: Float[Tensor, "... d"]):
     return _softmax(x, dim=self.dim)
@@ -176,7 +178,7 @@ class MultiHeadAttention(Module):
       n_queries = q_input.shape[-2]
       n_keys = q_input.shape[-2]
       assert n_queries == n_keys
-      mask = ~torch.triu(torch.ones(n_queries, n_keys, dtype=torch.bool), diagonal=1)
+      mask = ~torch.triu(torch.ones(n_queries, n_keys, dtype=torch.bool, device=V.device), diagonal=1)
     result = _scaled_dot_product_attention(Q, K, V, mask)
     result = rearrange(result, "... h queries d_v -> ... queries (h d_v)")
     return self.linear_o.forward(result)

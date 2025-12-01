@@ -20,6 +20,8 @@ dependencies = [
     "wandb>=0.19.7",
     "ty>=0.0.1a16",
     "matplotlib>=3.10.7",
+    "datasets>=4.4.1",
+    "ray>=2.52.1",
 ]
 
 [build-system]

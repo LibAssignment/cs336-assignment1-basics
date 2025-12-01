@@ -87,7 +87,6 @@ def get_words(
   return final_words
 
 
-from multiprocessing import Pool
 from dataclasses import dataclass
 @dataclass
 class GetWordsParam:
@@ -117,6 +116,7 @@ def get_words_parallel(
     re_special_tokens: regex.Pattern[str] | str,
     parallel_count = 8,
 ) -> Counter[str]:
+  from ray.util.multiprocessing import Pool
   with open(filename, 'rb') as file:
     boundaries = find_chunk_boundaries(file, desired_num_chunks, split_special_token)
 
