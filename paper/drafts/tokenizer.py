@@ -4,8 +4,8 @@ from cs336_basics.tokenizer import Tokenizer
 special_tokens = ["<|endoftext|>"]
 # input_path = '../tests/fixtures/corpus.en'
 input_path = '../tests/fixtures/tinystories_sample_5M.txt'
-# input_path = './fixtures/TinyStories-train.txt'
-# input_path = "./chinese.txt"
+# input_path = '../experiment/fixtures/TinyStories-train.txt'
+# input_path = "../experiment/chinese.txt"
 vocab_size = 2000
 
 tokenizer = Tokenizer.training_from_file(input_path, special_tokens)

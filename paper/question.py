@@ -54,7 +54,7 @@ import os
 import time
 
 special_tokens = ["<|endoftext|>"]
-input_path = './fixtures/TinyStoriesV2-GPT4-train.txt'
+input_path = '../experiment/fixtures/TinyStoriesV2-GPT4-train.txt'
 vocab_size = 10_000
 
 tokenizer = None
