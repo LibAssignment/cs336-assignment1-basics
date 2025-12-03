@@ -30,33 +30,55 @@ idx = np.load(idx_filename)['arr_0'] # type: np.ndarray
 
 # %%
 from cs336_basics.training import RandomTokenDataLoader
-context_length = 1024
-vocab_size = tokenizer.vocab_size
-batch_size = 32
-d_model = 256
-d_ff = d_model * 4
-num_heads = 4
-theta = 10000
-num_layers = 3
-device = "mps"
+from dataclasses import dataclass, asdict
 
-dataset = RandomTokenDataLoader(idx, batch_size=batch_size, context_length=context_length, device=device)
+@dataclass
+class Config:
+  vocab_size: int
+  context_length = 1024
+  batch_size = 32
+  d_model = 256
+  d_ff = d_model * 4
+  num_heads = 4
+  theta = 10000
+  num_layers = 3
+
+device = "cuda"
+
+config = Config(vocab_size = tokenizer.vocab_size)
+
+dataset = RandomTokenDataLoader(idx, batch_size=config.batch_size, context_length=config.context_length, device=device)
 
 # %%
 from cs336_basics.modules import LLM, _cross_entory
 from cs336_basics.optimizer import AdamW
-a = LLM(vocab_size=vocab_size, num_layers=3, context_length=context_length, d_model=d_model, d_ff=d_ff, num_heads=num_heads, theta=theta, device=device)
+a = LLM(
+  vocab_size=config.vocab_size,
+  num_layers=config.num_layers,
+  context_length=config.context_length,
+  d_model=config.d_model,
+  d_ff=config.d_ff,
+  num_heads=config.num_heads,
+  theta=config.theta,
+  device=device
+)
 optimizer = AdamW(a.parameters())
 
 # %%
-x, y = dataset[0]
+import wandb
+epoch = 100
+with wandb.init("clouds56", "llm-assignment1", config={
+  **asdict(config)
+}) as run:
+  for i in range(epoch):
+    x, y = dataset[i]
+    y_hat = a.forward(x)
+    loss = _cross_entory(y_hat, y).mean()
 
-# %%
-y_hat = a.forward(x)
-loss = _cross_entory(y_hat, y).mean()
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    run.log({'loss': loss})
+    logging.info(f"epoch {i}: loss={loss.item()}")
 
-optimizer.zero_grad()
-loss.backward()
-optimizer.step()
-loss
 # %%
