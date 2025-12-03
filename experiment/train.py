@@ -66,6 +66,7 @@ optimizer = AdamW(a.parameters())
 
 # %%
 import wandb
+from cs336_basics.training import _save_checkpoint
 epoch = 100
 with wandb.init("clouds56", "llm-assignment1", config={
   **asdict(config)
@@ -80,5 +81,31 @@ with wandb.init("clouds56", "llm-assignment1", config={
     optimizer.step()
     run.log({'loss': loss})
     logging.info(f"epoch {i}: loss={loss.item()}")
+# %%
+from cs336_basics.training import _save_checkpoint
+_save_checkpoint(a, optimizer, epoch, out="a.pt")
+
+# %%
+from cs336_basics.training import _load_checkpoint
+_load_checkpoint("a.pt", a, optimizer)
+
+# %%
+import torch
+inputs = tokenizer.encode("I")
+
+def _choice(prob: torch.Tensor) -> int:
+  p = np.arange(prob.size(-1))
+  return np.random.choice(p, p=prob.cpu().detach().numpy()).item()
+for i in range(100):
+  x = torch.ones(1024, dtype=torch.int)
+  for k, v in enumerate(inputs):
+    x[k] = v
+  y_pred = a.forward(x.to(device=device), prob=True)
+  # next_i = y_pred[-1].argmax().item()
+  next_i = _choice(y_pred[-1])
+  assert isinstance(next_i, int)
+  logging.info(f"pred {i} => {next_i}")
+  inputs.append(next_i)
+tokenizer.decode(inputs)
 
 # %%

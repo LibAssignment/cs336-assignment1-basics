@@ -227,13 +227,14 @@ class LLM(Module):
     self.out_embed = Linear(d_model, vocab_size, **kwargs)
     self.out_softmax = Softmax()
 
-  def forward(self, token_ids: Int[Tensor, "... vocab"]) -> Float[Tensor, "... vocab"]:
+  def forward(self, token_ids: Int[Tensor, "... vocab"], prob: bool = False) -> Float[Tensor, "... vocab"]:
     x = self.embedding.forward(token_ids)
     for layer in self.layers:
       x = layer.forward(x)
     x = self.norm1.forward(x)
     x = self.out_embed.forward(x)
-    # return self.out_softmax.forward(x)
+    if prob:
+      return self.out_softmax.forward(x)
     return x
 
 
