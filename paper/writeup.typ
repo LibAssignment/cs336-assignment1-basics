@@ -185,16 +185,16 @@ $
 #table(
   columns: (auto, auto, auto, auto),
   table.header("name", "matrix", "multiple", "value (TFLOPs)"),
-  "attn_rope", [$W_q in RR^(d_"model" times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
-  "attn_q_proj", [$W_q in RR^(h d_k times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
-  "attn_k_proj", [$W_k in RR^(h d_k times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
-  "attn_v_proj", [$W_v in RR^(h d_v times d_"model"), x in RR^(d_"model")$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
-  "attn_o_proj", [$W_o in RR^(d_"model" times h d_v), x in RR^(h d_v)$], [`2*d_model^2*seq_len`], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
-  "ffn_linear1", [$W_1 in RR^(d_"ff" times d_"model"), x in RR^(d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
-  "ffn_linear_gate", [$W_3 in RR^(d_"ff" times d_"model"), x in RR^(d_"model")$], [`2*d_model*d_ff*seq_len`], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
-  "ffn_linear2", [$W_3 in RR^(d_"model" times d_"ff"), x in RR^(d_"ff")$], [`2*d_model*d_ff*seq_len`], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
+  "attn_rope", [$W_q in RR^(d_m times d_m), x in RR^(d_m)$], [$2 dot d_m^2 dot"seq"$], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "attn_q_proj", [$W_q in RR^(h d_k times d_m), x in RR^(d_m)$], [$2 dot d_m^2 dot"seq"$], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "attn_k_proj", [$W_k in RR^(h d_k times d_m), x in RR^(d_m)$], [$2 dot d_m^2 dot"seq"$], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "attn_v_proj", [$W_v in RR^(h d_v times d_m), x in RR^(d_m)$], [$2 dot d_m^2 dot"seq"$], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "attn_o_proj", [$W_o in RR^(d_m times h d_v), x in RR^(h d_v)$], [$2 dot d_m^2 dot"seq"$], [#calc_M(config_xl.tflops.attn.proj, k: 4)],
+  "ffn_linear1", [$W_1 in RR^(d_"ff" times d_m), x in RR^(d_m)$], [$2 dot d_m dot d_"ff"dot"seq"$], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
+  "ffn_linear_gate", [$W_3 in RR^(d_"ff" times d_m), x in RR^(d_m)$], [$2 dot d_m dot d_"ff"dot"seq"$], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
+  "ffn_linear2", [$W_3 in RR^(d_m times d_"ff"), x in RR^(d_"ff")$], [$2 dot d_m dot d_"ff"dot"seq"$], [#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)],
   "attn_total", [], [$5 times #calc_M(config_xl.tflops.attn.proj, k:4, i:3) + 3times#calc_M(config_xl.tflops.attn.ffn_linear, k: 4)$], [#calc_M(config_xl.tflops.attn.total, k: 4)],
-  "head_embedding", [$W_e in RR^(d_"model" times"vocab"), x in RR^(d_"model")$], [`2*d_model*vocab*seq_len`], [#calc_M(config_xl.tflops.head_embedding, k: 4)],
+  "head_embedding", [$W_e in RR^(d_m times"vocab"), x in RR^(d_m)$], [$2 dot d_m dot "vocab" dot "seq"$], [#calc_M(config_xl.tflops.head_embedding, k: 4)],
   "total", [], [$#config_xl.num_layers times #calc_M(config_xl.tflops.attn.total, k: 4) + #calc_M(config_xl.tflops.head_embedding, k: 4)$], [#calc_M(config_xl.tflops.total, k: 4)]
 )
 
@@ -303,7 +303,73 @@ Notes:
 === Problem (gradient_clipping): Implement gradient clipping
 Note: we are dealing with `param.grad` here.
 
-=== Problem (adamwAccounting): Resource accounting for training with AdamW
+== Problem (adamwAccounting): Resource accounting for training with AdamW
+=== a) How much peak memory does running AdamW require?
+#let d_ff_ratio = 4
+- Transformer Block: multiplies `num_layers` times
+  - RMSNorm: $d_m dot B dot "seq"$
+  - Attention:
+    - QKV: $d_m dot B dot "seq"$
+    - $Q^Tau K$, softmax: $h dot B dot "seq" dot "seq"$
+    - weighted sum: $d_m dot B dot "seq"$
+    - output projection: $d_m dot B dot "seq"$
+  - Feed-forward:
+    - $W_1$, SiLU: $#d_ff_ratio d_m dot B dot "seq"$
+    - $W_2$: $d_m dot B dot "seq"$
+  - Total: $d_m dot B dot "seq" times #(2 + 3 + 1 + 1 + d_ff_ratio * 2 + 1) + B dot "seq"^2 times 2 $
+- final RMSNorm: $d_m dot B dot "seq"$
+- output embedding: $"vocab_size" dot B dot "seq"$
+- cross entropy: $B dot "seq"$
+- Total Activation: $
+d_m dot B dot "seq" times (#(2 * d_ff_ratio + 8) "num_layers" + 1) + \
+B dot "seq"^2 times (2 "num_layers") + \
+("vocab_size" + 1) dot B dot "seq"
+$
+- Total Params: $
+"vocab_size" dot d_m times 2 + \
+d_m^2 times (#(4 + 3 * d_ff_ratio) "num_layers") + \
+d_m times (2 "num_layers" + 1)
+$
+
+=== (b) Instantiate your answer for a GPT-2 XL-shaped model to get an expression that only depends on the batch_size. What is the maximum batch size you can use and still fit within 80GB memory?
+#let calc_peak_memory(config, batch_size, byte_len: 4, adam: 2) = {
+  let d_model = config.d_model
+  let context_length = config.context_length
+  let vocab_size = config.vocab_size
+  let num_layers = config.num_layers
+  let num_heads = config.num_heads
+  let act = (
+    model: d_model * context_length * ((2 * d_ff_ratio + 8) * num_layers + 1),
+    seq: context_length*context_length * num_heads * (2 * num_layers),
+    vocab: (vocab_size + 1) * context_length,
+  )
+  act.total = act.model + act.seq + act.vocab
+  let params = (
+    vocab: vocab_size * d_model * 2,
+    model: d_model * d_model * (4 + 3 * d_ff_ratio) * num_layers,
+    const: d_model * (2 * num_layers + 1)
+  )
+  params.total = params.vocab + params.model + params.const
+  (
+    detail: (
+      act: act,
+      params: params,
+      inputs: (
+        batch_size: batch_size,
+        byte_len: byte_len,
+        adam: adam,
+      )
+    ),
+    act: act.total * byte_len,
+    params: params.total * byte_len,
+    total: batch_size * act.total + params.total * (2 + adam),
+  )
+}
+#let a1 = calc_peak_memory(config_xl_base, 32)
+Total memory usage would be $#(calc_MiB(a1.act, k: 3)) dot "batch_size" + #(calc_MiB(a1.params * 4, k: 3))$, max batch_size would be #calc.floor((80 - calc_MiB(a1.params * 4, k: 3)) / calc_MiB(a1.act, k: 3)).
+
+Notes:
+- $Q^T K$ should multiplies `num_heads`
 
 = Training loop
 === Problem (data_loading): Implement data loading
