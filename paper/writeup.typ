@@ -334,6 +334,7 @@ $
 === (b) Instantiate your answer for a GPT-2 XL-shaped model to get an expression that only depends on the batch_size. What is the maximum batch size you can use and still fit within 80GB memory?
 #let calc_peak_memory(config, batch_size, byte_len: 4, adam: 2) = {
   let d_model = config.d_model
+  let d_ff_ratio = config.d_ff / config.d_model
   let context_length = config.context_length
   let vocab_size = config.vocab_size
   let num_layers = config.num_layers
@@ -350,6 +351,7 @@ $
     const: d_model * (2 * num_layers + 1)
   )
   params.total = params.vocab + params.model + params.const
+  let total = batch_size * act.total + params.total * (2 + adam)
   (
     detail: (
       act: act,
@@ -362,7 +364,8 @@ $
     ),
     act: act.total * byte_len,
     params: params.total * byte_len,
-    total: batch_size * act.total + params.total * (2 + adam),
+    total: total,
+    total_gib: calc_MiB(total * byte_len, k: 3),
   )
 }
 #let a1 = calc_peak_memory(config_xl_base, 32)
@@ -370,6 +373,18 @@ Total memory usage would be $#(calc_MiB(a1.act, k: 3)) dot "batch_size" + #(calc
 
 Notes:
 - $Q^T K$ should multiplies `num_heads`
+
+// this is out config in practice, just for reference
+#let myconfig = (
+  vocab_size: 1000,
+  d_model: 256,
+  d_ff: 1024,
+  num_heads: 4,
+  num_layers: 3,
+  context_length: 1024
+)
+#let myconfig = calc_params(myconfig)
+#let a2 = calc_peak_memory(myconfig, 32)
 
 = Training loop
 === Problem (data_loading): Implement data loading

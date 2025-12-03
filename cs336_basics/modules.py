@@ -113,6 +113,7 @@ class FFN(Module):
 
 
 class RoPE(Module):
+  R: Tensor
   __constants__ = ["theta", "d_k", "d_n"]
   def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None, dtype=None):
     kwargs = DeviceParams(device=device, dtype=dtype)
@@ -121,7 +122,8 @@ class RoPE(Module):
     self.d_k = d_k
     self.d_n = max_seq_len
     R = _rope_rotate(self.Theta, self.d_n, self.d_k)
-    self.R = R.to_dense().to(device=device, dtype=dtype)
+    # self.R = R.to_dense().to(device=device, dtype=dtype)
+    self.register_buffer("R", R.to_dense().to(device=device, dtype=dtype), persistent=False)
 
   def forward(self, x: Float[Tensor, "... seq_len d_k"], token_positions: Int[Tensor, "... seq_len"] | None = None):
     assert x.shape[-1] == self.d_k
@@ -219,6 +221,7 @@ class LLM(Module):
     d_k = d_model // num_heads
     if pos_embed is None:
       pos_embed = RoPE(theta=theta, d_k=d_k, max_seq_len=context_length, **kwargs)
+    self.pos_embed = pos_embed
     self.layers = torch.nn.ModuleList([
       TransformerBlock(d_model=d_model, d_ff=d_ff, d_k=d_k, d_v=d_k, num_heads=num_heads, sig=sig, pos_embed=pos_embed, **kwargs)
       for _ in range(num_layers)

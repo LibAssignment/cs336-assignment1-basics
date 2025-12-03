@@ -65,6 +65,14 @@ a = LLM(
 optimizer = AdamW(a.parameters())
 
 # %%
+import torch
+from fvcore.nn import FlopCountAnalysis, ActivationCountAnalysis, flop_count_table
+x = torch.zeros((config.batch_size, config.context_length), dtype=torch.int)
+flops = FlopCountAnalysis(a, x)
+act = ActivationCountAnalysis(a, x)
+print(flop_count_table(flops, activations=act))
+
+# %%
 import wandb
 from cs336_basics.training import _save_checkpoint
 epoch = 100
