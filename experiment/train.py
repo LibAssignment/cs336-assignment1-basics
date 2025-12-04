@@ -2,10 +2,17 @@
 from cs336_basics.tokenizer import Tokenizer, train_bpe
 from pathlib import Path
 import logging
+import time
 
-logging.basicConfig(filename="train.log", level=logging.DEBUG)
+def mkpath(s: str) -> Path:
+  d = Path(s)
+  d.mkdir(parents=True, exist_ok=True)
+  return d
+
+logs_dir = mkpath("logs")
+logging.basicConfig(filename=logs_dir/f"train-{int(time.time())}.log", level=logging.DEBUG)
 fixture = Path(__file__).parent.parent / "experiment/fixtures/TinyStoriesV2-GPT4-train.txt"
-out_dir = Path("out")
+out_dir = mkpath("out")
 name = fixture.stem
 vocab_size = 10000
 tokenizer_filename = f"tokenizer.{name}.{vocab_size}.json"
@@ -13,7 +20,6 @@ merges_filename = f"merges.{name}.{vocab_size}.txt"
 
 # tinystories_sample_5M: 23s
 if not (out_dir/tokenizer_filename).exists():
-  out_dir.mkdir(parents=True, exist_ok=True)
   tokenizer = train_bpe(fixture, vocab_size, ["<|endoftext|>"])
   tokenizer.save_to_files(out_dir/tokenizer_filename, out_dir/merges_filename)
 
@@ -89,8 +95,9 @@ if torch.cuda.is_available():
 # %%
 import wandb
 from cs336_basics.training import _save_checkpoint
+import math
 epoch = config.epochs
-epoch = 5
+cp_dir = mkpath("checkpoints")
 # torch.cuda.memory._record_memory_history()
 with wandb.init("clouds56", "llm-assignment1", config={
   **asdict(config)
@@ -99,18 +106,31 @@ with wandb.init("clouds56", "llm-assignment1", config={
     x, y = dataset[i]
     y_hat = a.forward(x)
     loss = _cross_entory(y_hat, y).mean()
-    print(f"allocated {torch.cuda.memory_allocated() / 2**30:.3}, cached: {torch.cuda.memory_reserved() / 2**30:.3}")
+
+    if math.isnan(loss.item()):
+      logging.info(f"save epoch {i}")
+      _save_checkpoint(a, optimizer, i, cp_dir/f"a.{name}.{i}.pt")
+      logging.error("loss is nan")
+      break
+
+    if i % 100 == 0:
+      logging.debug(f"allocated {torch.cuda.memory_allocated() / 2**30:.3}, cached: {torch.cuda.memory_reserved() / 2**30:.3}")
 
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
     run.log({'loss': loss})
     logging.info(f"epoch {i}: loss={loss.item()}")
+
+    if i % 1 == 0:
+      logging.info(f"save epoch {i}")
+      _save_checkpoint(a, optimizer, i, cp_dir/f"a.{name}.{i}.pt")
+
 # torch.cuda.memory._dump_snapshot("my_snapshot2.pickle")
 
 # %%
 from cs336_basics.training import _save_checkpoint
-_save_checkpoint(a, optimizer, epoch, out="a.pt")
+_save_checkpoint(a, optimizer, epoch, out=out_dir/f"a.{name}.{epoch}.pt")
 
 # %%
 if torch.cuda.is_available():
