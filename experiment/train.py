@@ -36,7 +36,7 @@ from dataclasses import dataclass, asdict
 class Config:
   vocab_size: int
   context_length = 1024
-  batch_size = 32
+  batch_size = 24
   d_model = 256
   d_ff = d_model * 4
   num_heads = 4
@@ -83,6 +83,7 @@ with wandb.init("clouds56", "llm-assignment1", config={
     x, y = dataset[i]
     y_hat = a.forward(x)
     loss = _cross_entory(y_hat, y).mean()
+    print(f"allocated {torch.cuda.memory_allocated() / 2**30:.3}, cached: {torch.cuda.memory_reserved() / 2**30:.3}")
 
     optimizer.zero_grad()
     loss.backward()
@@ -92,6 +93,10 @@ with wandb.init("clouds56", "llm-assignment1", config={
 # %%
 from cs336_basics.training import _save_checkpoint
 _save_checkpoint(a, optimizer, epoch, out="a.pt")
+
+# %%
+if torch.cuda.is_available():
+  torch.cuda.empty_cache()
 
 # %%
 from cs336_basics.training import _load_checkpoint
@@ -104,6 +109,7 @@ inputs = tokenizer.encode("I")
 def _choice(prob: torch.Tensor) -> int:
   p = np.arange(prob.size(-1))
   return np.random.choice(p, p=prob.cpu().detach().numpy()).item()
+
 for i in range(100):
   x = torch.ones(1024, dtype=torch.int)
   for k, v in enumerate(inputs):
