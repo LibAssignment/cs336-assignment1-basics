@@ -57,7 +57,7 @@ class _AdamState(TypedDict):
   step_count: NotRequired[int]
 
 class AdamW(Optimizer):
-  def __init__(self, params: ParamsT, lr: float = 0.001, weight_decay: float = 0.1, betas: tuple[float, float] = (0.9, 0.999), eps: float = 1e-8):
+  def __init__(self, params: ParamsT, lr: float = 3e-4, weight_decay: float = 0.01, betas: tuple[float, float] = (0.9, 0.999), eps: float = 1e-8):
     defaults = _AdamWParams(
       lr = lr,
       beta1 = betas[0],

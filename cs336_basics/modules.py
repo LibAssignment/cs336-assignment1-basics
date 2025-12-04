@@ -58,7 +58,7 @@ class RMSNorm(Module):
   def forward(self, x: Float[Tensor, " ... "]):
     in_dtype = x.dtype
     x = x.to(torch.float32)
-    rms = (x.pow(2).mean(dim=-1, keepdim=True) + self.eps).sqrt()
+    rms = ((x * x).mean(dim=-1, keepdim=True) + self.eps).sqrt()
     result = x / rms * self.weight
     return result.to(in_dtype)
 
@@ -72,7 +72,14 @@ class SiLU(Module):
   """
   $"SiLU"(x) = x dot sigma(x) = x / (1+e^(-x))$
   """
+  __constants__ = ["_threshold"]
+  def __init__(self, _threshold: float = -80.0):
+    super().__init__()
+    self._threshold = _threshold
+
   def forward(self, x: Tensor):
+    # trick:
+    x = x.masked_fill(x < self._threshold, self._threshold)
     return x / (1 + (-x).exp())
 
 
