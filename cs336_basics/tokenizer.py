@@ -173,7 +173,7 @@ class Tokenizer:
     self._vocab_byte_rev = {i: self.vocab_rev[bytes([i])] for i in range(256)}
     return self._vocab_byte_rev[b]
 
-  @lru_cache(maxsize=10000)
+  @lru_cache(maxsize=50000)
   def _encode_pretoken(self, s: str) -> list[Idx]:
     # TODO handle special_tokens
     idxs = [self.encode_byte(i) for i in s.encode(ENCODING)]

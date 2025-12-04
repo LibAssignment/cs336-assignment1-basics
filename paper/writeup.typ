@@ -339,7 +339,7 @@ $
   let vocab_size = config.vocab_size
   let num_layers = config.num_layers
   let num_heads = config.num_heads
-  let ffn_count = 2 + 2 // w1, silu, w3, multiplies
+  let ffn_count = 2 // w1, silu, w3, multiplies
   let qkv = 2 + 3 + 2 + 1 //  rms, qkv, sum/output, w2
   let additional_qkv = 0 // 2 + 2 // rope, mask
   let qk = 2 // qk, softmax
@@ -380,15 +380,15 @@ Notes:
 
 // this is out config in practice, just for reference
 #let myconfig = (
-  vocab_size: 1000,
-  d_model: 256,
-  d_ff: 1024,
-  num_heads: 4,
-  num_layers: 3,
-  context_length: 1024
+  vocab_size: 10000,
+  d_model: 512,
+  d_ff: 1344,
+  num_heads: 16,
+  num_layers: 4,
+  context_length: 256,
 )
 #let myconfig = calc_params(myconfig)
-#let a2 = calc_peak_memory(myconfig, 16)
+#let a2 = calc_peak_memory(myconfig, 32)
 
 = Training loop
 === Problem (data_loading): Implement data loading

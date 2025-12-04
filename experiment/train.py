@@ -4,29 +4,35 @@ from pathlib import Path
 import logging
 
 logging.basicConfig(filename="train.log", level=logging.DEBUG)
-fixture = Path(__file__).parent.parent / "tests/fixtures/tinystories_sample_5M.txt"
+fixture = Path(__file__).parent.parent / "experiment/fixtures/TinyStoriesV2-GPT4-train.txt"
+out_dir = Path("out")
 name = fixture.stem
-tokenizer_filename = f"tokenizer.{name}.json"
-merges_filename = f"merges.{name}.txt"
+vocab_size = 10000
+tokenizer_filename = f"tokenizer.{name}.{vocab_size}.json"
+merges_filename = f"merges.{name}.{vocab_size}.txt"
 
-if not Path(tokenizer_filename).exists():
-  tokenizer = train_bpe(fixture, 1000, ["<|endoftext|>"], chunks=10)
-  tokenizer.save_to_files(tokenizer_filename, merges_filename)
+# tinystories_sample_5M: 23s
+if not (out_dir/tokenizer_filename).exists():
+  out_dir.mkdir(parents=True, exist_ok=True)
+  tokenizer = train_bpe(fixture, vocab_size, ["<|endoftext|>"])
+  tokenizer.save_to_files(out_dir/tokenizer_filename, out_dir/merges_filename)
 
 # %%
 import numpy as np
 idx_filename = f"{name}.idx.npz"
-tokenizer = Tokenizer.from_files(tokenizer_filename, merges_filename)
+tokenizer = Tokenizer.from_files(out_dir/tokenizer_filename, out_dir/merges_filename)
 
-if not Path(idx_filename).exists():
+# out/tinystories_sample_5M.npz: 10s
+# out/TinyStoriesV2-GPT4-train.idx.npz: 7m59s
+if not (out_dir/idx_filename).exists():
   result = []
   with open(fixture, "r") as f:
     result.extend(tokenizer.encode_iterable(f))
   result = np.array(result)
-  np.savez(idx_filename, result, allow_pickle=False)
+  np.savez(out_dir/idx_filename, result, allow_pickle=False)
 
 # %%
-idx = np.load(idx_filename)['arr_0'] # type: np.ndarray
+idx = np.load(out_dir/idx_filename)['arr_0'] # type: np.ndarray
 
 # %%
 from cs336_basics.training import RandomTokenDataLoader
@@ -35,13 +41,18 @@ from dataclasses import dataclass, asdict
 @dataclass
 class Config:
   vocab_size: int
-  context_length = 1024
-  batch_size = 24
-  d_model = 256
-  d_ff = d_model * 4
-  num_heads = 4
+  batch_size = 32
+  context_length = 256
+  d_model = 512
+  d_ff = 1344 # d_model * 2.625
+  num_heads = 16
   theta = 10000
-  num_layers = 3
+  num_layers = 4
+  tokens = 327680000
+
+  @property
+  def epochs(self):
+    return self.tokens // (self.batch_size * self.context_length)
 
 device = "cuda"
 
@@ -72,10 +83,15 @@ flops = FlopCountAnalysis(a, x)
 act = ActivationCountAnalysis(a, x)
 print(flop_count_table(flops, activations=act))
 
+if torch.cuda.is_available():
+  torch.cuda.empty_cache()
+
 # %%
 import wandb
 from cs336_basics.training import _save_checkpoint
-epoch = 100
+epoch = config.epochs
+epoch = 5
+# torch.cuda.memory._record_memory_history()
 with wandb.init("clouds56", "llm-assignment1", config={
   **asdict(config)
 }) as run:
@@ -90,6 +106,8 @@ with wandb.init("clouds56", "llm-assignment1", config={
     optimizer.step()
     run.log({'loss': loss})
     logging.info(f"epoch {i}: loss={loss.item()}")
+# torch.cuda.memory._dump_snapshot("my_snapshot2.pickle")
+
 # %%
 from cs336_basics.training import _save_checkpoint
 _save_checkpoint(a, optimizer, epoch, out="a.pt")

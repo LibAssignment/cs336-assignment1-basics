@@ -1,1 +1,4 @@
-fixtures
+fixtures/
+logs/
+out/
+wandb/
