@@ -397,6 +397,10 @@ why `torch.save` with `torch.load` would not work well with `dtype == torch.int`
 === Problem (training_together): Put it together
 Notes:
 1. backward for `SiLU` would be `nan` if input is `-90` or lower.
+2. `torch.save` would leak, see #link("https://github.com/pytorch/pytorch/issues/149846")[pytorch\#149846]
+3. comment out `torch.cuda.memory._record_memory_history()` to avoid memory leak.
+
+
 ====
 1. wandb
   - wandb would load base_url from `~/.config/wandb`

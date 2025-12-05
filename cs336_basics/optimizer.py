@@ -81,17 +81,17 @@ class AdamW(Optimizer):
         state = cast(_AdamState, self.state[param])
         step_count = state.get('step_count', 0) + 1
         alpha_t = alpha * math.sqrt(1 - beta2**step_count) / (1 - beta1**step_count)
-        grad = param.grad
-        m = state.get('m', torch.zeros_like(param))
-        v = state.get('v', torch.zeros_like(param))
+        grad = param.grad.data
+        m = state.get('m', torch.zeros_like(param.data))
+        v = state.get('v', torch.zeros_like(param.data))
         m = beta1 * m + (1 - beta1) * grad
         v = beta2 * v + (1 - beta2) * (grad * grad)
-        state['m'] = m
-        state['v'] = v
-        state['step_count'] = step_count
 
         param.data -= alpha_t * m / (v.sqrt() + epsilon)
         param.data *= 1 - alpha * decay
+        state['m'] = m
+        state['v'] = v
+        state['step_count'] = step_count
     return loss
 
 class CosineLR(LRScheduler):

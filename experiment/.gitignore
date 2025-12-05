@@ -2,3 +2,4 @@ fixtures/
 logs/
 out/
 wandb/
+checkpoints/

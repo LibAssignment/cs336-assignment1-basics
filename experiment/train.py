@@ -115,7 +115,9 @@ run_id = None
 run_id = "1h45b6ce"
 assert (start_iteration == 0) == (run_id is None)
 resume = "must" if run_id else "allow"
-torch.cuda.memory._record_memory_history()
+
+# torch.cuda.memory._record_memory_history()
+
 with wandb.init("clouds56", "llm-assignment1", id=run_id, resume=resume, config={
   **asdict(config)
 }) as run:
@@ -130,7 +132,7 @@ with wandb.init("clouds56", "llm-assignment1", id=run_id, resume=resume, config=
       logging.error("loss is nan")
       break
 
-    if i % 100 == 0:
+    if i % 10 == 0:
       logging.debug(f"allocated {torch.cuda.memory_allocated() / 2**30:.3}, cached: {torch.cuda.memory_reserved() / 2**30:.3}")
 
     optimizer.zero_grad()

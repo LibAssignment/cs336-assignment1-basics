@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import IterableDataset, Dataset
 import numpy as np
 from jaxtyping import Bool, Float, Int
-from torch.serialization import FILE_LIKE
+from torch.types import FileLike
 
 class TokenDataLoader(IterableDataset):
   def __init__(self, array: Int[np.ndarray, "idx"], special_token: int, batch_size: int, context_length: int, device=None):
@@ -92,7 +92,7 @@ class CheckPointState(TypedDict):
   optim: dict[str, Any]
   iteration: int
 
-def _save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer, iteration: int, out: FILE_LIKE):
+def _save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer, iteration: int, out: FileLike):
   state = {
     "model": model.state_dict(),
     "optim": optimizer.state_dict(),
@@ -100,7 +100,7 @@ def _save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer, i
   }
   torch.save(state, out)
 
-def _load_checkpoint(src: FILE_LIKE, model: torch.nn.Module, optimizer: torch.optim.Optimizer):
+def _load_checkpoint(src: FileLike, model: torch.nn.Module, optimizer: torch.optim.Optimizer):
   state = cast(CheckPointState, torch.load(src))
   if 'model' not in state:
     raise ValueError("model not present in src")
