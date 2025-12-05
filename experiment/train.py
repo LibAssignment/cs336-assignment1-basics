@@ -82,6 +82,20 @@ a = LLM(
 optimizer = AdamW(a.parameters())
 
 # %%
+from cs336_basics.training import _load_checkpoint
+cp_dir = mkpath("checkpoints")
+checkpoint_filenames = [i.name for i in cp_dir.iterdir() if i.name.startswith(f"a.{name}.") and i.name.endswith(".pt")]
+def get_int(i: str):
+  try:
+    return int(i.split(".")[-2])
+  except:
+    return -1
+start_iteration = 0
+if checkpoint_filenames:
+  last_checkpoint_filenames = max(checkpoint_filenames, key=get_int)
+  start_iteration = _load_checkpoint(cp_dir/last_checkpoint_filenames, a, optimizer)["iteration"]
+
+# %%
 import torch
 from fvcore.nn import FlopCountAnalysis, ActivationCountAnalysis, flop_count_table
 x = torch.zeros((config.batch_size, config.context_length), dtype=torch.int)
@@ -97,12 +111,15 @@ import wandb
 from cs336_basics.training import _save_checkpoint
 import math
 epoch = config.epochs
-cp_dir = mkpath("checkpoints")
-# torch.cuda.memory._record_memory_history()
-with wandb.init("clouds56", "llm-assignment1", config={
+run_id = None
+run_id = "1h45b6ce"
+assert (start_iteration == 0) == (run_id is None)
+resume = "must" if run_id else "allow"
+torch.cuda.memory._record_memory_history()
+with wandb.init("clouds56", "llm-assignment1", id=run_id, resume=resume, config={
   **asdict(config)
 }) as run:
-  for i in range(epoch):
+  for i in range(start_iteration, epoch):
     x, y = dataset[i]
     y_hat = a.forward(x)
     loss = _cross_entory(y_hat, y).mean()
@@ -119,14 +136,15 @@ with wandb.init("clouds56", "llm-assignment1", config={
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    run.log({'loss': loss})
     logging.info(f"epoch {i}: loss={loss.item()}")
+    run.log({'loss': loss})
 
-    if i % 1 == 0:
+    if i % 100 == 0:
       logging.info(f"save epoch {i}")
       _save_checkpoint(a, optimizer, i, cp_dir/f"a.{name}.{i}.pt")
 
 # torch.cuda.memory._dump_snapshot("my_snapshot2.pickle")
+# torch.cuda.memory._record_memory_history(None)
 
 # %%
 from cs336_basics.training import _save_checkpoint

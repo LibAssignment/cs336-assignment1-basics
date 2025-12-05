@@ -72,14 +72,14 @@ class SiLU(Module):
   """
   $"SiLU"(x) = x dot sigma(x) = x / (1+e^(-x))$
   """
-  __constants__ = ["_threshold"]
+  _threshold: Tensor
   def __init__(self, _threshold: float = -80.0):
     super().__init__()
-    self._threshold = _threshold
+    self.register_buffer("_threshold", torch.tensor(_threshold), persistent=False)
 
   def forward(self, x: Tensor):
     # trick:
-    x = x.masked_fill(x < self._threshold, self._threshold)
+    x = torch.max(x, self._threshold)
     return x / (1 + (-x).exp())
 
 
