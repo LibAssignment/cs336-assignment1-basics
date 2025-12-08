@@ -4,3 +4,6 @@ out.txt
 fixtures/
 tokenizer.json
 merges.txt
+merges.*.txt
+vocab.*.json
+tokens.*.json

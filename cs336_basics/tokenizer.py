@@ -103,13 +103,17 @@ class Tokenizer:
         merges.append((cls.from_visable(a), cls.from_visable(b)))
     return cls(vocabs, merges, special_tokens)
 
-  def save_to_files(self, vocab_filepath: str | os.PathLike, merges_filepath: str | os.PathLike):
+  def save_to_files(self, vocab_filepath: str | os.PathLike, merges_filepath: str | os.PathLike, *, freq=False):
     vocabs= self.visible_vocabs_dict
     with open(vocab_filepath, "w") as f:
       json.dump(vocabs, f, ensure_ascii=False, indent=2)
     with open(merges_filepath, "w") as f:
-      for line in self.visible_merges_list:
-        f.write(f"{line}\n")
+      if freq:
+        for (line, merge) in zip(self.visible_merges_list, self.merges):
+          f.write(f"{line} => {merge.freq}\n")
+      else:
+        for line in self.visible_merges_list:
+          f.write(f"{line}\n")
 
   @classmethod
   def training_from_file(cls, input_path: str | os.PathLike, special_tokens: list[str], desired_num_chunks=1024) -> Self:

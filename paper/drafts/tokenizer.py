@@ -1,20 +1,35 @@
 # %%
+from collections import Counter
 from cs336_basics.tokenizer import Tokenizer
+from pathlib import Path
+
+workspace_dir = Path(__file__).parent.parent.parent
 
 special_tokens = ["<|endoftext|>"]
 # input_path = '../tests/fixtures/corpus.en'
-input_path = '../tests/fixtures/tinystories_sample_5M.txt'
+input_path = workspace_dir / 'tests/fixtures/tinystories_sample_5M.txt'
+# input_path = workspace_dir / 'experiment/fixtures/TinyStoriesV2-GPT4-train.txt'
 # input_path = '../experiment/fixtures/TinyStories-train.txt'
 # input_path = "../experiment/chinese.txt"
+name = input_path.stem
 vocab_size = 2000
 
 tokenizer = Tokenizer.training_from_file(input_path, special_tokens)
+import json
+tokens = Counter({v.src.decode():v.freq for v in tokenizer.current_tokens})
+with open(f"../tokens.{name}.json", "w") as f:
+  json.dump(tokens, f, ensure_ascii=False, indent=2)
+
+# %%
 while len(tokenizer.vocabs) < vocab_size:
   current_merge = tokenizer.step()
   if current_merge is None:
     break
   # print(f"merge {tokenizer.apply_idx(current_merge.tp)} => [{len(tokenizer.vocabs)}] {current_merge.freq}")
 tokenizer.vocabs
+
+# %%
+tokenizer.save_to_files(f"../vocab.{name}.json", f"../merges.{name}.txt", freq=True)
 
 # %%
 """
