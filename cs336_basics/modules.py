@@ -1,3 +1,4 @@
+import math
 from typing import Any, TypedDict
 from einops import einsum, rearrange, repeat
 import torch.nn
@@ -21,7 +22,11 @@ class Linear(Module):
     self.weight = Parameter(
       torch.empty(self.d_out, self.d_in, **kwargs)
     )
-    torch.nn.init.trunc_normal_(self.weight)
+    self.reset_parameters()
+
+  def reset_parameters(self):
+    std = math.sqrt(2 / (self.d_in + self.d_out))
+    torch.nn.init.trunc_normal_(self.weight, std=std, a=-3*std, b=3*std)
 
   def forward(self, in_features: Float[Tensor, " ... d_in"]):
     # einsum(in_features, self.weight, "... d_in, d_out d_in -> ... d_out")
@@ -38,7 +43,10 @@ class Embedding(Module):
     self.weight = Parameter(
       torch.empty(self.n_embed, self.d_embed, **kwargs)
     )
-    torch.nn.init.trunc_normal_(self.weight)
+    self.reset_parameters()
+
+  def reset_parameters(self, std = 1):
+    torch.nn.init.trunc_normal_(self.weight, std=std, a=-3*std, b=3*std)
 
   def forward(self, token_ids: Int[Tensor, " ... vocab"]) -> Float[Tensor, " ... d_embed"]:
     return self.weight[token_ids]
