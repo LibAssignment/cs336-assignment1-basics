@@ -308,6 +308,7 @@ def _scaled_dot_product_attention(
     V: Float[Tensor, " ... keys d_v"],
     mask: Bool[Tensor, " ... queries keys"] | None = None,
 ) -> Float[Tensor, " ... queries d_v"]:
+  # TODO: warning?
   d_k = torch.tensor(K.shape[-1])
   atten = einsum(Q, K, "... queries d_k, ... keys d_k -> ... queries keys")
   if mask is not None:

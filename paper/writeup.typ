@@ -397,3 +397,11 @@ why `torch.save` with `torch.load` would not work well with `dtype == torch.int`
 === Problem (training_together): Put it together
 Notes:
 1. backward for `SiLU` would be `nan` if input is `-90` or lower.
+====
+1. wandb
+  - wandb would load base_url from `~/.config/wandb`
+  - `wandb server start` doesn't works well on arm64
+2. fvcore
+3. runpod
+  - runpod doesn't support
+2. nan?
