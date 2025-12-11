@@ -20,6 +20,7 @@ class Config:
   lr: float = 3e-4
   weight_decay: float = 0.01
   betas: tuple[float, float] = (0.9, 0.999)
+  gradient_clipping: float | None = 1e-2
   _tokens: int | None = None # 327680000
 
   @property

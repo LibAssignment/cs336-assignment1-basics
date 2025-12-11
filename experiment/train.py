@@ -101,6 +101,7 @@ if torch.cuda.is_available():
 import math
 import wandb
 from cs336_basics.training import _save_checkpoint
+from cs336_basics.optimizer import _gradient_clipping
 from cs336_basics.modules import LLM, _cross_entory
 epoch = config.epochs
 run_id = None
@@ -112,6 +113,7 @@ resume = "must" if run_id else "allow"
 
 with wandb.init(project="llm-assignment1", id=run_id, resume=resume, config=config.to_dict()) as run:
   for i in range(start_iteration, epoch):
+    optimizer.zero_grad()
     x, y = dataset[i]
     y_hat = a.forward(x)
     loss = _cross_entory(y_hat, y).mean()
@@ -125,8 +127,9 @@ with wandb.init(project="llm-assignment1", id=run_id, resume=resume, config=conf
     if i % 10 == 0:
       logging.debug(f"allocated {torch.cuda.memory_allocated() / 2**30:.3}, cached: {torch.cuda.memory_reserved() / 2**30:.3}")
 
-    optimizer.zero_grad()
     loss.backward()
+    if config.gradient_clipping is not None:
+      _gradient_clipping(a.parameters(), config.gradient_clipping)
     optimizer.step()
     logging.info(f"epoch {i}: loss={loss.item()}")
     run.log({'loss': loss})
