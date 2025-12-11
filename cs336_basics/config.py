@@ -17,6 +17,9 @@ class Config:
   num_heads: int = 16
   theta: int = 10000
   num_layers: int = 4
+  lr: float = 3e-4
+  weight_decay: float = 0.01
+  betas: tuple[float, float] = (0.9, 0.999)
   _tokens: int | None = None # 327680000
 
   @property
@@ -126,5 +129,5 @@ class Config:
       theta=self.theta,
       device=device
     )
-    optimizer = AdamW(a.parameters())
+    optimizer = AdamW(a.parameters(), lr=self.lr, weight_decay=self.weight_decay, betas=self.betas)
     return a, optimizer
