@@ -22,6 +22,8 @@ merges_filename = f"merges.{name}.{vocab_size}.txt"
 if not (out_dir/tokenizer_filename).exists():
   tokenizer = train_bpe(fixture, vocab_size, ["<|endoftext|>"])
   tokenizer.save_to_files(out_dir/tokenizer_filename, out_dir/merges_filename)
+else:
+  tokenizer = Tokenizer.from_files(out_dir/tokenizer_filename, out_dir/merges_filename)
 
 # %%
 import numpy as np
@@ -36,8 +38,6 @@ if not (out_dir/idx_filename).exists():
     result.extend(tokenizer.encode_iterable(f))
   result = np.array(result)
   np.savez(out_dir/idx_filename, result, allow_pickle=False)
-
-# %%
 idx = np.load(out_dir/idx_filename)['arr_0'] # type: np.ndarray
 
 # %%
@@ -70,21 +70,7 @@ config.to_dict()
 # %%
 device = "cuda"
 dataset = RandomTokenDataLoader(idx, batch_size=config.batch_size, context_length=config.context_length, device=device)
-
-# %%
-from cs336_basics.modules import LLM, _cross_entory
-from cs336_basics.optimizer import AdamW
-a = LLM(
-  vocab_size=config.vocab_size,
-  num_layers=config.num_layers,
-  context_length=config.context_length,
-  d_model=config.d_model,
-  d_ff=config.d_ff,
-  num_heads=config.num_heads,
-  theta=config.theta,
-  device=device
-)
-optimizer = AdamW(a.parameters())
+a, optimizer = config.create_llm(device=device)
 
 # %%
 from cs336_basics.training import _load_checkpoint
@@ -112,9 +98,10 @@ if torch.cuda.is_available():
   torch.cuda.empty_cache()
 
 # %%
+import math
 import wandb
 from cs336_basics.training import _save_checkpoint
-import math
+from cs336_basics.modules import LLM, _cross_entory
 epoch = config.epochs
 run_id = None
 # run_id = "1h45b6ce"
@@ -154,33 +141,33 @@ with wandb.init(project="llm-assignment1", id=run_id, resume=resume, config=conf
 # %%
 from cs336_basics.training import _save_checkpoint
 _save_checkpoint(a, optimizer, epoch, out=out_dir/f"a.{name}.{epoch}.pt")
+# %%
+config.save(out_dir/f"a.config.{name}.{vocab_size}.json")
 
 # %%
+import torch
 if torch.cuda.is_available():
   torch.cuda.empty_cache()
 
 # %%
+from cs336_basics.config import Config
 from cs336_basics.training import _load_checkpoint
-_load_checkpoint("a.pt", a, optimizer)
+device = "cpu"
+config = Config.load(out_dir/f"a.config.{name}.{vocab_size}.json")
+a, optimizer = config.create_llm(device=device)
+_load_checkpoint(out_dir/f"a.{name}.{config.epochs}.pt", a, optimizer, device=device)
 
-# %%
+# %%\
 import torch
-inputs = tokenizer.encode("I")
+from cs336_basics.inference import gen_text
 
-def _choice(prob: torch.Tensor) -> int:
-  p = np.arange(prob.size(-1))
-  return np.random.choice(p, p=prob.cpu().detach().numpy()).item()
-
-for i in range(100):
-  x = torch.ones(1024, dtype=torch.int)
-  for k, v in enumerate(inputs):
-    x[k] = v
-  y_pred = a.forward(x.to(device=device), prob=True)
-  # next_i = y_pred[-1].argmax().item()
-  next_i = _choice(y_pred[-1])
-  assert isinstance(next_i, int)
-  logging.info(f"pred {i} => {next_i}")
-  inputs.append(next_i)
-tokenizer.decode(inputs)
+output = gen_text(
+  prefix_text="Once upon a time",
+  n=200,
+  llm=a,
+  tokenizer=tokenizer,
+  device=device
+)
+print(output)
 
 # %%

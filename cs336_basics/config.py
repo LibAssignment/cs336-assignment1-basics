@@ -1,7 +1,11 @@
 from dataclasses import asdict, dataclass
-from typing import Self
+from typing import Self, TYPE_CHECKING
 from torch.types import FileLike
 import os
+
+if TYPE_CHECKING:
+  from cs336_basics.modules import LLM
+  from cs336_basics.optimizer import Optimizer
 
 @dataclass
 class Config:
@@ -108,3 +112,19 @@ class Config:
       data = json.loads(s)
     data.pop("info", None)
     return cls(**data)
+
+  def create_llm(self, device = None) -> tuple["LLM", "Optimizer"]:
+    from cs336_basics.modules import LLM
+    from cs336_basics.optimizer import AdamW
+    a = LLM(
+      vocab_size=self.vocab_size,
+      num_layers=self.num_layers,
+      context_length=self.context_length,
+      d_model=self.d_model,
+      d_ff=self.d_ff,
+      num_heads=self.num_heads,
+      theta=self.theta,
+      device=device
+    )
+    optimizer = AdamW(a.parameters())
+    return a, optimizer
