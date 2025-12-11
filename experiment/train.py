@@ -15,7 +15,7 @@ fixture = Path(__file__).parent.parent / "experiment/fixtures/TinyStoriesV2-GPT4
 out_dir = mkpath("out")
 name = fixture.stem
 vocab_size = 10000
-tokenizer_filename = f"tokenizer.{name}.{vocab_size}.json"
+tokenizer_filename = f"vocab.{name}.{vocab_size}.json"
 merges_filename = f"merges.{name}.{vocab_size}.txt"
 
 # tinystories_sample_5M: 23s
@@ -27,7 +27,7 @@ else:
 
 # %%
 import numpy as np
-idx_filename = f"{name}.idx.npz"
+idx_filename = f"idxs.{name}.npy"
 tokenizer = Tokenizer.from_files(out_dir/tokenizer_filename, out_dir/merges_filename)
 
 # out/tinystories_sample_5M.npz: 10s
@@ -38,7 +38,8 @@ if not (out_dir/idx_filename).exists():
     result.extend(tokenizer.encode_iterable(f))
   result = np.array(result)
   np.savez(out_dir/idx_filename, result, allow_pickle=False)
-idx = np.load(out_dir/idx_filename)['arr_0'] # type: np.ndarray
+idx = np.load(out_dir/idx_filename) # type: np.ndarray
+idx = idx.astype(np.int64)
 
 # %%
 from cs336_basics.config import Config
@@ -137,9 +138,6 @@ with wandb.init(project="llm-assignment1", id=run_id, resume=resume, config=conf
     if i % 100 == 0:
       logging.info(f"save epoch {i}")
       _save_checkpoint(a, optimizer, i, cp_dir/f"a.{name}.{i}.pt")
-
-# torch.cuda.memory._dump_snapshot("my_snapshot2.pickle")
-# torch.cuda.memory._record_memory_history(None)
 
 # %%
 from cs336_basics.training import _save_checkpoint

@@ -99,7 +99,7 @@ class Tokenizer:
         line = line.strip()
         if not line:
           continue
-        (a, b) = line.strip().split(' ')
+        (a, b) = line.strip().split(' ')[:2]
         merges.append((cls.from_visable(a), cls.from_visable(b)))
     return cls(vocabs, merges, special_tokens)
 
