@@ -399,6 +399,7 @@ Notes:
 1. backward for `SiLU` would be `nan` if input is `-90` or lower.
 2. `torch.save` would leak, see #link("https://github.com/pytorch/pytorch/issues/149846")[pytorch\#149846]
 3. comment out `torch.cuda.memory._record_memory_history()` to avoid memory leak.
+4. `softmax` should not detach `x_max`, alough the result of forward and backward should be the same, while in practice, it would cause gradient lost when some `x` is large enough (numerically unstable).
 
 
 ====

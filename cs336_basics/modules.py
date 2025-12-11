@@ -298,7 +298,7 @@ def _rope_rotate(Theta: float, n: int, k: int) -> Float[Tensor, "d_n d_k d_k"]:
   return torch.sparse_coo_tensor(idx, v, size=(n, k, k))
 
 def _softmax(x: Float[Tensor, "..."], dim = -1) -> Float[Tensor, "..."]:
-  x_max = torch.max(x, dim=dim, keepdim=True).values.detach()
+  x_max = torch.max(x, dim=dim, keepdim=True).values
   x = (x - x_max).exp()
   return x / x.sum(dim=dim, keepdim=True)
 
@@ -318,6 +318,6 @@ def _scaled_dot_product_attention(
 
 def _cross_entory(pred: Float[Tensor, "... pred"], target: Int[Tensor, "..."], dim=-1) -> Float[Tensor, "..."]:
   # -_softmax(pred)[target].log()
-  x = pred - pred.max(dim=dim, keepdim=True).values.detach()
+  x = pred - pred.max(dim=dim, keepdim=True).values
   x_sum = x.exp().sum(dim=dim).log()
   return x_sum - x.gather(dim=dim, index=target.unsqueeze(dim)).squeeze(dim)
