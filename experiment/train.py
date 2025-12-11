@@ -41,29 +41,34 @@ if not (out_dir/idx_filename).exists():
 idx = np.load(out_dir/idx_filename)['arr_0'] # type: np.ndarray
 
 # %%
+from cs336_basics.config import Config
 from cs336_basics.training import RandomTokenDataLoader
-from dataclasses import dataclass, asdict
 
-@dataclass
-class Config:
-  vocab_size: int
-  batch_size = 32
-  context_length = 256
-  d_model = 512
-  d_ff = 1344 # d_model * 2.625
-  num_heads = 16
-  theta = 10000
-  num_layers = 4
-  tokens = 327680000
+config = Config(
+  vocab_size=tokenizer.vocab_size,
+  batch_size=32,
+  context_length=256,
+  d_model=512,
+  d_ff=1344,
+  num_heads=16,
+  num_layers=4,
+  _tokens=327680000,
+)
 
-  @property
-  def epochs(self):
-    return self.tokens // (self.batch_size * self.context_length)
+cp_dir = mkpath("checkpoints/current")
+config_save_filename = cp_dir/f"_config.json"
+if config_save_filename.exists():
+  saved_config = Config.load(config_save_filename)
+  if saved_config != config:
+    print("use saved config")
+    logging.warning(f"config mismatch: saved={saved_config}, current={config}")
+    config = saved_config
+else:
+  config.save(config_save_filename)
+config.to_dict()
 
+# %%
 device = "cuda"
-
-config = Config(vocab_size = tokenizer.vocab_size)
-
 dataset = RandomTokenDataLoader(idx, batch_size=config.batch_size, context_length=config.context_length, device=device)
 
 # %%
@@ -83,7 +88,6 @@ optimizer = AdamW(a.parameters())
 
 # %%
 from cs336_basics.training import _load_checkpoint
-cp_dir = mkpath("checkpoints")
 checkpoint_filenames = [i.name for i in cp_dir.iterdir() if i.name.startswith(f"a.{name}.") and i.name.endswith(".pt")]
 def get_int(i: str):
   try:
@@ -94,6 +98,7 @@ start_iteration = 0
 if checkpoint_filenames:
   last_checkpoint_filenames = max(checkpoint_filenames, key=get_int)
   start_iteration = _load_checkpoint(cp_dir/last_checkpoint_filenames, a, optimizer)["iteration"]
+start_iteration
 
 # %%
 import torch
@@ -112,15 +117,13 @@ from cs336_basics.training import _save_checkpoint
 import math
 epoch = config.epochs
 run_id = None
-run_id = "1h45b6ce"
+# run_id = "1h45b6ce"
 assert (start_iteration == 0) == (run_id is None)
 resume = "must" if run_id else "allow"
 
 # torch.cuda.memory._record_memory_history()
 
-with wandb.init("clouds56", "llm-assignment1", id=run_id, resume=resume, config={
-  **asdict(config)
-}) as run:
+with wandb.init(project="llm-assignment1", id=run_id, resume=resume, config=config.to_dict()) as run:
   for i in range(start_iteration, epoch):
     x, y = dataset[i]
     y_hat = a.forward(x)
