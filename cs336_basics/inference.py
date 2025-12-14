@@ -8,7 +8,7 @@ def _choice(prob: torch.Tensor) -> int:
   p = np.arange(prob.size(-1))
   return np.random.choice(p, p=prob.cpu().detach().numpy()).item()
 
-def gen_text(prefix_text: str, n: int, *, llm: LLM, tokenizer: Tokenizer, device):
+def gen_text(prefix_text: str, n: int = 200, *, llm: LLM, tokenizer: Tokenizer, device = None):
   inputs = tokenizer.encode(prefix_text)
 
   for i in range(n):

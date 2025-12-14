@@ -100,12 +100,13 @@ def _save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer, i
   }
   torch.save(state, out)
 
-def _load_checkpoint(src: FileLike, model: torch.nn.Module, optimizer: torch.optim.Optimizer, *, device = None):
+def _load_checkpoint(src: FileLike, model: torch.nn.Module, optimizer: torch.optim.Optimizer | None = None, *, device = None):
   state = cast(CheckPointState, torch.load(src, map_location=device))
   if 'model' not in state:
     raise ValueError("model not present in src")
   if 'optim' not in state:
     raise ValueError("optimizer not present in src")
   model.load_state_dict(state['model'])
-  optimizer.load_state_dict(state['optim'])
+  if optimizer is not None:
+    optimizer.load_state_dict(state['optim'])
   return state
