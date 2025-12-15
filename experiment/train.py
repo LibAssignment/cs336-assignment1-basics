@@ -11,34 +11,36 @@ def mkpath(s: str) -> Path:
 
 logs_dir = mkpath("logs")
 logging.basicConfig(filename=logs_dir/f"train-{int(time.time())}.log", level=logging.DEBUG)
-fixture = Path(__file__).parent.parent / "experiment/fixtures/TinyStoriesV2-GPT4-train.txt"
+data_dir = mkpath("data")
+tokens_dir = mkpath("data/tokens")
+fixture = data_dir / "fixtures/TinyStoriesV2-GPT4-train.txt"
 out_dir = mkpath("out")
 name = fixture.stem
 vocab_size = 10000
-tokenizer_filename = f"vocab.{name}.{vocab_size}.json"
-merges_filename = f"merges.{name}.{vocab_size}.txt"
+tokenizer_filename = f"vocab.{name}[u8].json"
+merges_filename = f"merges.{name}[u8].txt"
 
 # tinystories_sample_5M: 23s
-if not (out_dir/tokenizer_filename).exists():
+if not (tokens_dir/tokenizer_filename).exists():
   tokenizer = train_bpe(fixture, vocab_size, ["<|endoftext|>"])
-  tokenizer.save_to_files(out_dir/tokenizer_filename, out_dir/merges_filename)
+  tokenizer.save_to_files(tokens_dir/tokenizer_filename, tokens_dir/merges_filename)
 else:
-  tokenizer = Tokenizer.from_files(out_dir/tokenizer_filename, out_dir/merges_filename)
+  tokenizer = Tokenizer.from_files(tokens_dir/tokenizer_filename, tokens_dir/merges_filename)
 
 # %%
 import numpy as np
 idx_filename = f"idxs.{name}.npy"
-tokenizer = Tokenizer.from_files(out_dir/tokenizer_filename, out_dir/merges_filename)
+tokenizer = Tokenizer.from_files(tokens_dir/tokenizer_filename, tokens_dir/merges_filename)
 
 # out/tinystories_sample_5M.npz: 10s
 # out/TinyStoriesV2-GPT4-train.idx.npz: 7m59s
-if not (out_dir/idx_filename).exists():
+if not (tokens_dir/idx_filename).exists():
   result = []
   with open(fixture, "r") as f:
     result.extend(tokenizer.encode_iterable(f))
   result = np.array(result)
-  np.savez(out_dir/idx_filename, result, allow_pickle=False)
-idx = np.load(out_dir/idx_filename) # type: np.ndarray
+  np.savez(tokens_dir/idx_filename, result, allow_pickle=False)
+idx = np.load(tokens_dir/idx_filename) # type: np.ndarray
 idx = idx.astype(np.int64)
 
 # %%
