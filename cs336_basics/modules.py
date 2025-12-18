@@ -182,9 +182,9 @@ class MultiHeadAttention(Module):
   ) -> Float[Tensor, "... queries d_v"]:
     if v_input is None:
       v_input = q_input
-    Q = self.linear_q.forward(q_input) # Float[Tensor, " ... queries d_k"]
-    K = self.linear_k.forward(v_input) # Float[Tensor, " ... keys d_k"]
-    V = self.linear_v.forward(v_input) # Float[Tensor, " ... keys d_v"]
+    Q = self.linear_q(q_input) # type: Float[Tensor, " ... queries d_k"]
+    K = self.linear_k(v_input) # type: Float[Tensor, " ... keys d_k"]
+    V = self.linear_v(v_input) # type: Float[Tensor, " ... keys d_v"]
     Q = rearrange(Q, "... queries (h d_k) -> ... h queries d_k", h=self.n_heads)
     K = rearrange(K, "... keys (h d_k) -> ... h keys d_k", h=self.n_heads)
     V = rearrange(V, "... keys (h d_v) -> ... h keys d_v", h=self.n_heads)
@@ -198,7 +198,7 @@ class MultiHeadAttention(Module):
       mask = ~torch.triu(torch.ones(n_queries, n_keys, dtype=torch.bool, device=V.device), diagonal=1)
     result = _scaled_dot_product_attention(Q, K, V, mask)
     result = rearrange(result, "... h queries d_v -> ... queries (h d_v)")
-    return self.linear_o.forward(result)
+    return self.linear_o(result)
 
 
 class TransformerBlock(Module):
@@ -219,9 +219,9 @@ class TransformerBlock(Module):
     self.ffn = FFN(d_model=d_model, d_hidden=d_ff, sig=sig, **kwargs)
     self.norm2 = RMSNorm(d_model=d_model, **kwargs)
 
-  def forward(self, x: Tensor):
-    attn = x + self.attn.forward(self.norm1.forward(x))
-    return attn + self.ffn.forward(self.norm2.forward(attn))
+  def forward(self, x: Tensor) -> Tensor:
+    attn = x + self.attn(self.norm1(x)) # type: Tensor
+    return attn + self.ffn(self.norm2(attn))
 
 
 class LLM(Module):
@@ -246,13 +246,13 @@ class LLM(Module):
     self.out_softmax = Softmax()
 
   def forward(self, token_ids: Int[Tensor, "... vocab"], prob: bool = False) -> Float[Tensor, "... vocab"]:
-    x = self.embedding.forward(token_ids)
+    x = self.embedding(token_ids)
     for layer in self.layers:
-      x = layer.forward(x)
-    x = self.norm1.forward(x)
-    x = self.out_embed.forward(x)
+      x = layer(x)
+    x = self.norm1(x)
+    x = self.out_embed(x)
     if prob:
-      return self.out_softmax.forward(x)
+      return self.out_softmax(x)
     return x
 
 
