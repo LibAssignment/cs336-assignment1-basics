@@ -71,7 +71,7 @@ for i in fixture_url:
   _download(i, filename)
 
 # %%
-from unitoken import PreTokenizer, BpeTrainer
+from uni_tokenizer import PreTokenizer, BpeTrainer
 from pathlib import Path
 tokenizer_dir = Path(__file__).parent.parent / "data/tokens"
 name = "TinyStoriesV2-GPT4-train"
@@ -89,7 +89,7 @@ def create_tokenizer(name: str, input_dir: Path = fixture_folder, output_dir: Pa
 
 create_tokenizer(name, vocab_size=10000)
 # %%
-from unitoken import BpeEncoder
+from uni_tokenizer import BpeEncoder
 import numpy as np
 def create_idx_file(name: str, input_dir: Path = fixture_folder, output_dir: Path = tokenizer_dir, chunks: int = 1024):
   input_file = input_dir / f"{name}.txt"

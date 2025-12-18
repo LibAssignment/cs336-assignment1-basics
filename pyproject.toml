@@ -23,7 +23,7 @@ dependencies = [
     "datasets>=4.4.1",
     "ray>=2.52.1",
     "fvcore>=0.1.5.post20221221",
-    "unitoken",
+    "uni-tokenizer>=0.1.1",
 ]
 
 [build-system]
@@ -33,9 +33,6 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "cs336_basics"
 module-root = ""
-
-[tool.uv.sources]
-unitoken = { git = "https://github.com/a-gradient/unitoken" }
 
 [tool.uv]
 package = true
