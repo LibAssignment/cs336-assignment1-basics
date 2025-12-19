@@ -143,7 +143,7 @@ class RoPE(Module):
   def forward(self, x: Float[Tensor, "... seq_len d_k"], token_positions: Int[Tensor, "... seq_len"] | None = None):
     assert x.shape[-1] == self.d_k
     if token_positions is None:
-      token_positions = torch.arange(x.shape[-2])
+      token_positions = torch.arange(x.shape[-2], device=x.device)
     assert x.shape[-2] == token_positions.shape[-1]
     m = self.R[token_positions]
     return einsum(x, m, "... k, ... k2 k -> ... k2")
