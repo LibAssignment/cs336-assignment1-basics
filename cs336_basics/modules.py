@@ -258,6 +258,7 @@ class LLM(Module):
 
 class CrossEntropy(Module):
   def __init__(self, dim=-1, reduce="mean") -> None:
+    super().__init__()
     self.dim = -1
     self.reduce = "mean"
 

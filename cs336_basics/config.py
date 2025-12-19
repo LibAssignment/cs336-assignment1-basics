@@ -8,7 +8,7 @@ if TYPE_CHECKING:
   from cs336_basics.optimizer import Optimizer
 
 @dataclass
-class Config:
+class LLMConfig:
   vocab_size: int
   batch_size: int = 32
   context_length: int = 256
